@@ -149,7 +149,32 @@ namespace Markdig.Renderers
             WriteIndent();
             previousWasLine = false;
             Writer.Write(content);
-            return (T) this;
+            return (T)this;
+        }
+
+        /// <summary>
+        /// Writes the specified content.
+        /// </summary>
+        /// <param name="content">The content.</param>
+        /// <returns>This instance</returns>
+        [MethodImpl(MethodImplOptionPortable.AggressiveInlining)]
+        public T Write(ReadOnlyMemory<char> content)
+        {
+            return Write(content.Span);
+        }
+
+        /// <summary>
+        /// Writes the specified content.
+        /// </summary>
+        /// <param name="content">The content.</param>
+        /// <returns>This instance</returns>
+        [MethodImpl(MethodImplOptionPortable.AggressiveInlining)]
+        public T Write(ReadOnlySpan<char> content)
+        {
+            WriteIndent();
+            previousWasLine = false;
+            Writer.Write(content);
+            return (T)this;
         }
 
         /// <summary>
@@ -162,7 +187,7 @@ namespace Markdig.Renderers
         {
             if (slice.Start > slice.End)
             {
-                return (T) this;
+                return (T)this;
             }
             return Write(slice.Text, slice.Start, slice.Length);
         }
@@ -189,7 +214,7 @@ namespace Markdig.Renderers
             WriteIndent();
             previousWasLine = content == '\n';
             Writer.Write(content);
-            return (T) this;
+            return (T)this;
         }
 
         /// <summary>
@@ -203,7 +228,7 @@ namespace Markdig.Renderers
         {
             if (content == null)
             {
-                return (T) this;
+                return (T)this;
             }
 
             WriteIndent();
@@ -225,7 +250,7 @@ namespace Markdig.Renderers
                     Writer.Write(buffer, 0, length);
                 }
             }
-            return (T) this;
+            return (T)this;
         }
 
         /// <summary>
@@ -238,7 +263,7 @@ namespace Markdig.Renderers
             WriteIndent();
             Writer.WriteLine();
             previousWasLine = true;
-            return (T) this;
+            return (T)this;
         }
 
         /// <summary>
@@ -252,7 +277,7 @@ namespace Markdig.Renderers
             WriteIndent();
             previousWasLine = true;
             Writer.WriteLine(content);
-            return (T) this;
+            return (T)this;
         }
 
         /// <summary>
@@ -264,7 +289,7 @@ namespace Markdig.Renderers
         public T WriteLeafInline(LeafBlock leafBlock)
         {
             if (leafBlock == null) throw new ArgumentNullException(nameof(leafBlock));
-            var inline = (Inline) leafBlock.Inline;
+            var inline = (Inline)leafBlock.Inline;
             if (inline != null)
             {
                 while (inline != null)
@@ -273,7 +298,7 @@ namespace Markdig.Renderers
                     inline = inline.NextSibling;
                 }
             }
-            return (T) this;
+            return (T)this;
         }
     }
 }
