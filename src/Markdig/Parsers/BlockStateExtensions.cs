@@ -16,7 +16,7 @@ namespace Markdig.Parsers
         /// </summary>
         /// <param name="blockState">State of the block.</param>
         /// <returns><c>true</c> if the block state is in discard state</returns>
-        [MethodImpl(MethodImplOptionPortable.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsDiscard(this BlockState blockState)
         {
             return blockState == BlockState.ContinueDiscard || blockState == BlockState.BreakDiscard;
@@ -27,7 +27,7 @@ namespace Markdig.Parsers
         /// </summary>
         /// <param name="blockState">State of the block.</param>
         /// <returns><c>true</c> if the block state is in continue state</returns>
-        [MethodImpl(MethodImplOptionPortable.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsContinue(this BlockState blockState)
         {
             return blockState == BlockState.Continue || blockState == BlockState.ContinueDiscard;
@@ -38,7 +38,7 @@ namespace Markdig.Parsers
         /// </summary>
         /// <param name="blockState">State of the block.</param>
         /// <returns><c>true</c> if the block state is in break state</returns>
-        [MethodImpl(MethodImplOptionPortable.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsBreak(this BlockState blockState)
         {
             return blockState == BlockState.Break || blockState == BlockState.BreakDiscard;

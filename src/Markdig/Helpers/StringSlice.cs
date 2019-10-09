@@ -88,7 +88,7 @@ namespace Markdig.Helpers
         /// <returns>
         /// The next character. `\0` is end of the iteration.
         /// </returns>
-        [MethodImpl(MethodImplOptionPortable.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public char NextChar()
         {
             Start++;
@@ -106,7 +106,7 @@ namespace Markdig.Helpers
         /// </summary>
         /// <param name="offset">The offset.</param>
         /// <returns>The character at offset, returns `\0` if none.</returns>
-        [MethodImpl(MethodImplOptionPortable.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public char PeekChar(int offset = 1)
         {
             var index = Start + offset;
@@ -117,7 +117,7 @@ namespace Markdig.Helpers
         /// Peeks a character at the specified offset from the current beginning of the string, without taking into account <see cref="Start"/> and <see cref="End"/>
         /// </summary>
         /// <returns>The character at offset, returns `\0` if none.</returns>
-        [MethodImpl(MethodImplOptionPortable.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public char PeekCharAbsolute(int index)
         {
             return index >= 0 && index < Text.Length ? Text[index] : (char)0;
@@ -129,7 +129,7 @@ namespace Markdig.Helpers
         /// </summary>
         /// <param name="offset">The offset.</param>
         /// <returns>The character at offset, returns `\0` if none.</returns>
-        [MethodImpl(MethodImplOptionPortable.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public char PeekCharExtra(int offset)
         {
             var index = Start + offset;
