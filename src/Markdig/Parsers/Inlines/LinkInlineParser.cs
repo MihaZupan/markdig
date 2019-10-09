@@ -4,6 +4,7 @@
 using Markdig.Helpers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using System;
 
 namespace Markdig.Parsers.Inlines
 {
@@ -49,11 +50,11 @@ namespace Markdig.Parsers.Inlines
                     var saved = slice;
 
                     // If the label is followed by either a ( or a [, this is not a shortcut
-                    if (LinkHelper.TryParseLabel(ref slice, out string label, out SourceSpan labelSpan))
+                    if (LinkHelper.TryParseLabel(ref slice, out ReadOnlyMemory<char> label, out SourceSpan labelSpan))
                     {
-                        if (!processor.Document.ContainsLinkReferenceDefinition(label))
+                        if (!processor.Document.ContainsLinkReferenceDefinition(label.Span))
                         {
-                            label = null;
+                            label = ReadOnlyMemory<char>.Empty;
                         }
                     }
                     slice = saved;
@@ -91,9 +92,9 @@ namespace Markdig.Parsers.Inlines
             return false;
         }
 
-        private bool ProcessLinkReference(InlineProcessor state, string label, bool isShortcut, SourceSpan labelSpan, LinkDelimiterInline parent, int endPosition)
+        private bool ProcessLinkReference(InlineProcessor state, ReadOnlyMemory<char> label, bool isShortcut, SourceSpan labelSpan, LinkDelimiterInline parent, int endPosition)
         {
-            if (!state.Document.TryGetLinkReferenceDefinition(label, out LinkReferenceDefinition linkRef))
+            if (!state.Document.TryGetLinkReferenceDefinition(label.Span, out LinkReferenceDefinition linkRef))
             {
                 return false;
             }
@@ -239,7 +240,7 @@ namespace Markdig.Parsers.Inlines
             }
 
             var labelSpan = SourceSpan.Empty;
-            string label = null;
+            var label = ReadOnlyMemory<char>.Empty;
             bool isLabelSpanLocal = true;
 
             bool isShortcut = false;
@@ -261,7 +262,7 @@ namespace Markdig.Parsers.Inlines
                 isShortcut = true;
             }
 
-            if (label != null || LinkHelper.TryParseLabel(ref text, true, out label, out labelSpan))
+            if (!label.IsEmpty || LinkHelper.TryParseLabel(ref text, true, out label, out labelSpan))
             {
                 if (isLabelSpanLocal)
                 {

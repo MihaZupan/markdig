@@ -21,11 +21,10 @@ namespace Markdig.Renderers.Normalize.Inlines
             renderer.WriteChildren(link);
             renderer.Write(']');
 
-            if (link.Label != null)
+            if (!link.Label.IsEmpty)
             {
-
                 var literal = link.FirstChild as LiteralInline;
-                if (literal != null && literal.Content.Match(link.Label) && literal.Content.Length == link.Label.Length)
+                if (literal != null && literal.Content.Match(link.Label.Span) && literal.Content.Length == link.Label.Length)
                 {
                     // collapsed reference and shortcut links
                     if (!link.IsShortcut)

@@ -1,8 +1,7 @@
-﻿// Copyright (c) Alexandre Mutel. All rights reserved.
+// Copyright (c) Alexandre Mutel. All rights reserved.
 // This file is licensed under the BSD-Clause 2 license. 
 // See the license.txt file in the project root for more information.
 using System;
-using System.Collections.Generic;
 
 namespace Markdig.Syntax
 {
@@ -13,15 +12,15 @@ namespace Markdig.Syntax
     {
         private static readonly object DocumentKey = typeof(LinkReferenceDefinitionGroup);
 
-        public static bool ContainsLinkReferenceDefinition(this MarkdownDocument document, string label)
+        public static bool ContainsLinkReferenceDefinition(this MarkdownDocument document, ReadOnlySpan<char> label)
         {
-            if (label == null) throw new ArgumentNullException(nameof(label));
+            if (label.IsEmpty) throw new ArgumentException("Label is empty", nameof(label));
             var references = document.GetData(DocumentKey) as LinkReferenceDefinitionGroup;
-            if (references == null)
+            if (references is null)
             {
                 return false;
             }
-            return references.Links.ContainsKey(label);
+            return references.Links.TryMatchExact(label, out var _);
         }
 
         public static void SetLinkReferenceDefinition(this MarkdownDocument document, string label, LinkReferenceDefinition linkReferenceDefinition)
@@ -31,7 +30,7 @@ namespace Markdig.Syntax
             references.Set(label, linkReferenceDefinition);
         }
 
-        public static bool TryGetLinkReferenceDefinition(this MarkdownDocument document, string label, out LinkReferenceDefinition linkReferenceDefinition)
+        public static bool TryGetLinkReferenceDefinition(this MarkdownDocument document, ReadOnlySpan<char> label, out LinkReferenceDefinition linkReferenceDefinition)
         {
             if (label == null) throw new ArgumentNullException(nameof(label));
             linkReferenceDefinition = null;

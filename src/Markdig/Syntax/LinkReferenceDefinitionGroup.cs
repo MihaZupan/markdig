@@ -2,15 +2,15 @@
 // This file is licensed under the BSD-Clause 2 license. 
 // See the license.txt file in the project root for more information.
 
+using Markdig.Helpers;
 using System;
-using System.Collections.Generic;
 
 namespace Markdig.Syntax
 {
     /// <summary>
     /// Contains all the <see cref="LinkReferenceDefinition"/> found in a document.
     /// </summary>
-    /// <seealso cref="Markdig.Syntax.ContainerBlock" />
+    /// <seealso cref="ContainerBlock" />
     public class LinkReferenceDefinitionGroup : ContainerBlock
     {
         /// <summary>
@@ -18,13 +18,13 @@ namespace Markdig.Syntax
         /// </summary>
         public LinkReferenceDefinitionGroup() : base(null)
         {
-            Links = new Dictionary<string, LinkReferenceDefinition>(StringComparer.OrdinalIgnoreCase);
+            Links = new CompactPrefixTree<LinkReferenceDefinition>(ignoreCase: true);
         }
 
         /// <summary>
         /// Gets an association between a label and the corresponding <see cref="LinkReferenceDefinition"/>
         /// </summary>
-        public Dictionary<string, LinkReferenceDefinition> Links { get; }
+        internal CompactPrefixTree<LinkReferenceDefinition> Links { get; }
 
         public void Set(string label, LinkReferenceDefinition link)
         {
@@ -42,6 +42,19 @@ namespace Markdig.Syntax
         public bool TryGet(string label, out LinkReferenceDefinition link)
         {
             return Links.TryGetValue(label, out link);
+        }
+        public bool TryGet(ReadOnlySpan<char> label, out LinkReferenceDefinition link)
+        {
+            if (Links.TryMatchExact(label, out var match))
+            {
+                link = match.Value;
+                return true;
+            }
+            else
+            {
+                link = null;
+                return false;
+            }
         }
     }
 }

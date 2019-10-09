@@ -2,6 +2,7 @@
 // This file is licensed under the BSD-Clause 2 license. 
 // See the license.txt file in the project root for more information.
 
+using System;
 using System.Diagnostics;
 
 namespace Markdig.Syntax.Inlines
@@ -57,7 +58,7 @@ namespace Markdig.Syntax.Inlines
         /// <summary>
         /// Gets or sets the label.
         /// </summary>
-        public string Label { get; set; }
+        public ReadOnlyMemory<char> Label { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this instance is an image link.

@@ -107,7 +107,7 @@ namespace Markdig.Extensions.AutoIdentifiers
                 // Here we make sure that auto-identifiers will not override an existing link definition
                 // defined in the document
                 // If it is the case, we skip the auto identifier for the Heading
-                if (!doc.TryGetLinkReferenceDefinition(keyPair.Key, out var linkDef))
+                if (!doc.TryGetLinkReferenceDefinition(keyPair.Key.AsSpan(), out var linkDef))
                 {
                     doc.SetLinkReferenceDefinition(keyPair.Key, keyPair.Value);
                 }
