@@ -2,6 +2,7 @@
 // This file is licensed under the BSD-Clause 2 license. 
 // See the license.txt file in the project root for more information.
 
+using Markdig.Syntax;
 using System;
 using System.Runtime.CompilerServices;
 
@@ -144,6 +145,24 @@ namespace Markdig.Helpers
         public bool Match(string text, int offset = 0)
         {
             return Match(text, End, offset);
+        }
+        public bool Match(ReadOnlySpan<char> text, int offset = 0)
+        {
+            return Match(text, End, offset);
+        }
+        public bool Match(ReadOnlySpan<char> text, int end, int offset)
+        {
+            var index = Start + offset;
+            int i = 0;
+            for (; index <= end && i < text.Length; i++, index++)
+            {
+                if (text[i] != Text[index])
+                {
+                    return false;
+                }
+            }
+
+            return i == text.Length;
         }
 
         /// <summary>
@@ -370,6 +389,16 @@ namespace Markdig.Helpers
                 }
             }
             return true;
+        }
+
+        internal ReadOnlyMemory<char> AsMemory()
+        {
+            return IsEmpty ? ReadOnlyMemory<char>.Empty : Text.AsMemory(Start, Length);
+        }
+
+        internal ReadOnlyMemory<char> AsMemory(in SourceSpan span)
+        {
+            return span.IsEmpty ? ReadOnlyMemory<char>.Empty : Text.AsMemory(span.Start, span.Length);
         }
     }
 }

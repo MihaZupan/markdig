@@ -842,6 +842,10 @@ namespace Markdig.Helpers
         {
             return TryParseLabel(ref lines, false, out label, out labelSpan);
         }
+        public static bool TryParseLabel(ref StringSlice text, out ReadOnlyMemory<char> label, out SourceSpan labelSpan)
+        {
+            return TryParseLabel(ref text, false, out label, out labelSpan);
+        }
 
         public static bool TryParseLabel<T>(ref T lines, bool allowEmpty, out string label, out SourceSpan labelSpan) where T : ICharIterator
         {
@@ -956,6 +960,127 @@ namespace Markdig.Helpers
             buffer.Length = 0;
 
             return isValid;
+        }
+        public static bool TryParseLabel(ref StringSlice text, bool allowEmpty, out ReadOnlyMemory<char> label, out SourceSpan labelSpan)
+        {
+            label = null;
+            char c = text.CurrentChar;
+            labelSpan = SourceSpan.Empty;
+            if (c != '[')
+            {
+                return false;
+            }
+            var buffer = StringBuilderCache.Local();
+
+            var startLabel = -1;
+            var endLabel = -1;
+
+            bool hasEscape = false;
+            bool previousWhitespace = true;
+            bool hasNonWhiteSpace = false;
+
+            while (true)
+            {
+                c = text.NextChar();
+                if (c == '\0')
+                {
+                    break;
+                }
+
+                if (hasEscape)
+                {
+                    if (c != '[' && c != ']' && c != '\\')
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    if (c == '[')
+                    {
+                        break;
+                    }
+
+                    if (c == ']')
+                    {
+                        text.NextChar(); // Skip ]
+                        if (allowEmpty || hasNonWhiteSpace)
+                        {
+                            // Remove trailing spaces
+                            for (int i = buffer.Length - 1; i >= 0; i--)
+                            {
+                                if (!buffer[i].IsWhitespace())
+                                {
+                                    break;
+                                }
+                                buffer.Length = i;
+                                endLabel--;
+                            }
+
+                            // Only valid if buffer is less than 1000 characters
+                            if (buffer.Length <= 999)
+                            {
+                                labelSpan.Start = startLabel;
+                                labelSpan.End = endLabel;
+                                if (labelSpan.Start > labelSpan.End)
+                                {
+                                    labelSpan = SourceSpan.Empty;
+                                }
+
+                                if (buffer.Length == labelSpan.Length)
+                                {
+                                    label = text.AsMemory(labelSpan);
+                                }
+                                else
+                                {
+                                    label = buffer.GetStringAndReset().AsMemory();
+                                }
+
+                                return true;
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                var isWhitespace = c.IsWhitespace();
+                if (isWhitespace)
+                {
+                    // Replace any whitespace by a single ' '
+                    c = ' ';
+                }
+
+                if (!hasEscape && c == '\\')
+                {
+                    if (startLabel < 0)
+                    {
+                        startLabel = text.Start;
+                    }
+                    hasEscape = true;
+                }
+                else
+                {
+                    hasEscape = false;
+
+                    if (!previousWhitespace || !isWhitespace)
+                    {
+                        if (startLabel < 0)
+                        {
+                            startLabel = text.Start;
+                        }
+                        endLabel = text.Start;
+                        buffer.Append(c);
+                        if (!isWhitespace)
+                        {
+                            hasNonWhiteSpace = true;
+                        }
+                    }
+                }
+                previousWhitespace = isWhitespace;
+            }
+
+            buffer.Length = 0;
+            return false;
         }
     }
 }
