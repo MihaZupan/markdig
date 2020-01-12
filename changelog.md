@@ -1,5 +1,7 @@
 # Changelog
 
+- Re-allow emojis and smileys customization, that was broken in [PR #308](https://github.com/lunet-io/markdig/pull/308) ([PR #386](https://github.com/lunet-io/markdig/pull/386))
+
 ## 0.18.0 (24 Oct 2019)
 - Ignore backslashes in GFM AutoLinks ([(PR #357)](https://github.com/lunet-io/markdig/pull/357))
 - Fix SmartyPants quote matching ([(PR #360)](https://github.com/lunet-io/markdig/pull/360))
