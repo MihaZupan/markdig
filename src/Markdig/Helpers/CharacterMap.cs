@@ -35,7 +35,9 @@ namespace Markdig.Helpers
             {
                 var openingChar = map.Key;
                 charSet.Add(openingChar);
-                maxChar = Math.Max(maxChar, openingChar);
+
+                if (openingChar < 128)
+                    maxChar = Math.Max(maxChar, openingChar);
             }
 
             OpeningCharacters = charSet.ToArray();
