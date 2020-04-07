@@ -10,6 +10,8 @@ namespace Markdig.Helpers
     [ExcludeFromCodeCoverage]
     internal static class ThrowHelper
     {
+        public static void ArgumentNullException(string paramName) => throw new ArgumentNullException(paramName);
+
         public static void ThrowArgumentNullException(ExceptionArgument argument)
         {
             throw new ArgumentNullException(GetArgumentName(argument));
