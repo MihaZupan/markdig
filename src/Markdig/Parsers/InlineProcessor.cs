@@ -137,25 +137,28 @@ namespace Markdig.Parsers
         public int GetSourcePosition(int sliceOffset, out int lineIndex, out int column)
         {
             column = 0;
-            lineIndex = sliceOffset >= previousSliceOffset ? previousLineIndexForSliceOffset : 0;
+            lineIndex = 0;
+
             int position = 0;
             if (PreciseSourceLocation)
             {
-                for (; lineIndex < lineOffsets.Count; lineIndex++)
+                List<StringLineGroup.LineOffset> offsets = lineOffsets;
+                for (int i = sliceOffset >= previousSliceOffset ? previousLineIndexForSliceOffset : 0; i < offsets.Count; i++)
                 {
-                    var lineOffset = lineOffsets[lineIndex];
+                    StringLineGroup.LineOffset lineOffset = offsets[i];
                     if (sliceOffset <= lineOffset.End)
                     {
                         // Use the beginning of the line as a previous slice offset
                         // (since it is on the same line)
-                        previousSliceOffset = lineOffsets[lineIndex].Start;
-                        var delta = sliceOffset - previousSliceOffset;
-                        column = lineOffsets[lineIndex].Column + delta;
-                        position = lineOffset.LinePosition + delta + lineOffsets[lineIndex].Offset;
-                        previousLineIndexForSliceOffset = lineIndex;
+                        var delta = sliceOffset - lineOffset.Start;
+                        column = lineOffset.Column + delta;
+                        position = lineOffset.LinePosition + delta + lineOffset.Offset;
+
+                        previousSliceOffset = lineOffset.Start;
+                        previousLineIndexForSliceOffset = i;
 
                         // Return an absolute line index
-                        lineIndex = lineIndex + LineIndex;
+                        lineIndex = i + LineIndex;
                         break;
                     }
                 }
