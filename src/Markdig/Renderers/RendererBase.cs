@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Markdig.Helpers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -16,7 +17,7 @@ namespace Markdig.Renderers
     /// <seealso cref="IMarkdownRenderer" />
     public abstract class RendererBase : IMarkdownRenderer
     {
-        private readonly Dictionary<RuntimeTypeHandle, IMarkdownObjectRenderer?> _renderersPerType = new();
+        private readonly Dictionary<RuntimeTypeHandle, Action<RendererBase, MarkdownObject>> _renderActionPerType = new();
         internal int _childrenDepth = 0;
 
         /// <summary>
@@ -24,23 +25,39 @@ namespace Markdig.Renderers
         /// </summary>
         protected RendererBase() { }
 
-        private IMarkdownObjectRenderer? GetRendererInstance(MarkdownObject obj)
+        private Action<RendererBase, MarkdownObject> GetRenderAction(MarkdownObject obj)
         {
-            RuntimeTypeHandle typeHandle = Type.GetTypeHandle(obj);
-            Type objectType = obj.GetType();
+            Action<RendererBase, MarkdownObject>? renderAction = null;
 
+            Type objectType = obj.GetType();
             for (int i = 0; i < ObjectRenderers.Count; i++)
             {
                 var renderer = ObjectRenderers[i];
                 if (renderer.Accept(this, objectType))
                 {
-                    _renderersPerType[typeHandle] = renderer;
-                    return renderer;
+                    renderAction = renderer.Write;
+                    break;
                 }
             }
 
-            _renderersPerType[typeHandle] = null;
-            return null;
+            if (renderAction is null)
+            {
+                if (obj is ContainerInline)
+                {
+                    renderAction = static (renderer, obj) => renderer.WriteContainerInlineChildren(obj);
+                }
+                else if (obj is ContainerBlock)
+                {
+                    renderAction = static (renderer, obj) => renderer.WriteContainerBlockChildren(obj);
+                }
+                else
+                {
+                    renderAction = static (renderer, obj) => { };
+                }
+            }
+
+            _renderActionPerType[Type.GetTypeHandle(obj)] = renderAction;
+            return renderAction;
         }
 
         public ObjectRendererCollection ObjectRenderers { get; } = new();
@@ -67,10 +84,15 @@ namespace Markdig.Renderers
         /// <param name="containerBlock">The container block.</param>
         public void WriteChildren(ContainerBlock containerBlock)
         {
-            if (containerBlock is null)
+            if (containerBlock is not null)
             {
-                return;
+                WriteContainerBlockChildren(containerBlock);
             }
+        }
+
+        private void WriteContainerBlockChildren(MarkdownObject obj)
+        {
+            ContainerBlock containerBlock = Unsafe.As<ContainerBlock>(obj);
 
             ThrowHelper.CheckDepthLimit(_childrenDepth++);
 
@@ -97,10 +119,15 @@ namespace Markdig.Renderers
         /// <param name="containerInline">The container inline.</param>
         public void WriteChildren(ContainerInline containerInline)
         {
-            if (containerInline is null)
+            if (containerInline is not null)
             {
-                return;
+                WriteContainerInlineChildren(containerInline);
             }
+        }
+
+        private void WriteContainerInlineChildren(MarkdownObject obj)
+        {
+            ContainerInline containerInline = Unsafe.As<ContainerInline>(obj);
 
             ThrowHelper.CheckDepthLimit(_childrenDepth++);
 
@@ -140,23 +167,12 @@ namespace Markdig.Renderers
             // Calls before writing an object
             ObjectWriteBefore?.Invoke(this, obj);
 
-            if (!_renderersPerType.TryGetValue(Type.GetTypeHandle(obj), out IMarkdownObjectRenderer? renderer))
+            if (!_renderActionPerType.TryGetValue(Type.GetTypeHandle(obj), out Action<RendererBase, MarkdownObject> renderAction))
             {
-                renderer = GetRendererInstance(obj);
+                renderAction = GetRenderAction(obj);
             }
 
-            if (renderer is not null)
-            {
-                renderer.Write(this, obj);
-            }
-            else if (obj is ContainerInline containerInline)
-            {
-                WriteChildren(containerInline);
-            }
-            else if (obj is ContainerBlock containerBlock)
-            {
-                WriteChildren(containerBlock);
-            }
+            renderAction(this, obj);
 
             // Calls after writing an object
             ObjectWriteAfter?.Invoke(this, obj);
