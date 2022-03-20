@@ -41,7 +41,7 @@ namespace Markdig.Parsers.Inlines
             }
             else if (entityValue >= 0)
             {
-                literal = EntityHelper.DecodeEntity(entityValue);
+                literal = EntityHelper.DecodeEntity((uint)entityValue);
             }
             return literal != null;
         }

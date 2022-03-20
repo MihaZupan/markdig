@@ -58,7 +58,7 @@ namespace Markdig.Helpers
         /// Decodes the given UTF-32 character code to the matching set of UTF-16 characters.
         /// </summary>
         /// <returns>The unicode character set or <c>null</c> if the entity was not recognized.</returns>
-        public static string DecodeEntity(int utf32)
+        public static string DecodeEntity(uint utf32)
         {
             if (!CharHelper.IsInInclusiveRange(utf32, 1, 1114111) || CharHelper.IsInInclusiveRange(utf32, 55296, 57343))
                 return CharHelper.ReplacementCharString;
@@ -75,12 +75,12 @@ namespace Markdig.Helpers
 #endif
                 char[]
             {
-                (char)((uint)utf32 / 1024 + 55296),
-                (char)((uint)utf32 % 1024 + 56320)
+                (char)(utf32 / 1024 + 55296),
+                (char)(utf32 % 1024 + 56320)
             });
         }
 
-        internal static void DecodeEntity(int utf32, ref ValueStringBuilder sb)
+        internal static void DecodeEntity(uint utf32, ref ValueStringBuilder sb)
         {
             if (!CharHelper.IsInInclusiveRange(utf32, 1, 1114111) || CharHelper.IsInInclusiveRange(utf32, 55296, 57343))
             {
@@ -93,12 +93,11 @@ namespace Markdig.Helpers
             else
             {
                 utf32 -= 65536;
-                sb.Append((char)((uint)utf32 / 1024 + 55296));
-                sb.Append((char)((uint)utf32 % 1024 + 56320));
+                sb.Append((char)(utf32 / 1024 + 55296));
+                sb.Append((char)(utf32 % 1024 + 56320));
             }
         }
 
-        #region [ EntityMap ]
         /// <summary>
         /// Source: http://www.w3.org/html/wg/drafts/html/master/syntax.html#named-character-references
         /// </summary>
@@ -2230,6 +2229,5 @@ namespace Markdig.Helpers
             { "zwj", "\u200D" },
             { "zwnj", "\u200C" }
         };
-#endregion
     }
 }

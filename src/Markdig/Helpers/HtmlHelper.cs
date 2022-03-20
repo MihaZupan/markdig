@@ -4,6 +4,7 @@
 
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace Markdig.Helpers
 {
@@ -14,26 +15,24 @@ namespace Markdig.Helpers
     {
         private static readonly char[] SearchBackAndAmp = { '\\', '&' };
         private static readonly char[] SearchAmp = { '&' };
-        private static readonly string[] EscapeUrlsForAscii = new string[128];
 
-        static HtmlHelper()
+        private static readonly uint[] s_validUrlNonEscapedChars =
         {
-            for (int i = 0; i < EscapeUrlsForAscii.Length; i++)
-            {
-                if (i <= 32 || @"""'<>[\]^`{|}~".IndexOf((char)i) >= 0 || i == 127)
-                {
-                    EscapeUrlsForAscii[i] = $"%{i:X2}";
-                }
-                else if ((char) i == '&')
-                {
-                    EscapeUrlsForAscii[i] = "&amp;";
-                }
-            }
-        }
+            // All except "'<>[\]^`{|}~&
+            0b_11111111_11111111_11111111_11111111,
+            0b_11011100_11111111_11111111_11110101,
+            0b_11111111_11111111_11111111_11100001,
+            0b_01111111_11111111_11111111_11100001,
+        };
 
-        public static string? EscapeUrlCharacter(char c)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool IsValidNonEscapedUrlCharacter(uint c)
         {
-            return c < 128 ? EscapeUrlsForAscii[c] : null;
+            uint[] validChars = s_validUrlNonEscapedChars;
+            uint offset = c >> 5;
+            uint significantBit = 1u << (int)(c & 31u);
+
+            return offset < (uint)validChars.Length && (validChars[offset] & significantBit) != 0;
         }
 
         public static bool TryParseHtmlTag(ref StringSlice text, [NotNullWhen(true)] out string? htmlTag)
@@ -479,7 +478,7 @@ namespace Markdig.Helpers
                         else if (numericEntity >= 0)
                         {
                             sb.Append(text.AsSpan(lastPos, searchPos - match - lastPos));
-                            EntityHelper.DecodeEntity(numericEntity, ref sb);
+                            EntityHelper.DecodeEntity((uint)numericEntity, ref sb);
                             lastPos = searchPos;
                         }
                     }

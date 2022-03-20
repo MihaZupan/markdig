@@ -80,6 +80,27 @@ namespace Markdig.Helpers
             }
         }
 
+        public void AppendEscaped(uint b)
+        {
+            int pos = _pos;
+            Span<char> chars = _chars;
+            if ((uint)(pos + 2) < (uint)_chars.Length)
+            {
+                uint difference = ((b & 0xF0U) << 4) + (b & 0x0FU) - 0x8989U;
+                uint packedResult = ((((uint)(-(int)difference) & 0x7070U) >> 4) + difference + 0xB9B9U);
+
+                chars[pos + 2] = (char)(packedResult & 0xFF);
+                chars[pos + 1] = (char)(packedResult >> 8);
+                chars[pos] = '%';
+
+                _pos = pos + 3;
+            }
+            else
+            {
+                GrowAndAppendEscaped(b);
+            }
+        }
+
         public void Append(char c, int count)
         {
             if (_pos > _chars.Length - count)
@@ -154,6 +175,13 @@ namespace Markdig.Helpers
         {
             Grow(1);
             Append(c);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void GrowAndAppendEscaped(uint b)
+        {
+            Grow(3);
+            AppendEscaped(b);
         }
 
         /// <summary>

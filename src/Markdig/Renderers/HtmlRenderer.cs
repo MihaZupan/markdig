@@ -21,6 +21,7 @@ namespace Markdig.Renderers
     public class HtmlRenderer : TextRendererBase<HtmlRenderer>
     {
         private static ReadOnlySpan<char> WriteEscapeIndexOfAnyChars => new[] { '<', '>', '&', '"' };
+        private static ReadOnlySpan<char> EndOfDomainIndexOfAnyChars => new[] { '/', '?', '#', ':' };
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HtmlRenderer"/> class.
@@ -237,120 +238,109 @@ namespace Markdig.Renderers
                 content = LinkRewriter(content);
             }
 
+            var builder = new ValueStringBuilder(stackalloc char[ValueStringBuilder.StackallocThreshold]);
+
             // a://c.d = 7 chars
-            int schemeOffset = content.Length < 7 ? -1 : content.AsSpan(1).IndexOf("://", StringComparison.Ordinal);
+            int schemeOffset = content.Length < 7 ? -1 : content.AsSpan(1).IndexOf("://".AsSpan(), StringComparison.Ordinal);
             if (schemeOffset != -1) // This is an absolute URL
             {
                 schemeOffset += 3; // skip ://
-                WriteEscapeUrl(content, 0, schemeOffset);
+                WriteEscapeUrl(content.AsSpan(0, schemeOffset), ref builder);
+
+                int domainLength = content.AsSpan(schemeOffset).IndexOfAny(EndOfDomainIndexOfAnyChars);
+                if (domainLength == -1)
+                {
+                    domainLength = content.Length - schemeOffset - 1;
+                }
 
                 bool idnaEncodeDomain = false;
-                int endOfDomain = schemeOffset;
-                for (; endOfDomain < content.Length; endOfDomain++)
+                foreach (char c in content.AsSpan(schemeOffset, domainLength))
                 {
-                    char c = content[endOfDomain];
-                    if (c == '/' || c == '?' || c == '#' || c == ':') // End of domain part
-                    {
-                        break;
-                    }
                     if (c > 127)
                     {
                         idnaEncodeDomain = true;
+                        break;
                     }
                 }
 
                 if (idnaEncodeDomain)
                 {
-                    string domainName;
-
                     try
                     {
-                        domainName = IdnMapping.GetAscii(content, schemeOffset, endOfDomain - schemeOffset);
+                        string domainName = IdnMapping.GetAscii(content, schemeOffset, domainLength);
+                        WriteEscapeUrl(domainName.AsSpan(), ref builder);
+                        WriteEscapeUrl(content.AsSpan(schemeOffset + domainLength), ref builder);
                     }
                     catch
                     {
                         // Not a valid IDN, fallback to non-punycode encoding
-                        WriteEscapeUrl(content, schemeOffset, content.Length);
-                        return this;
+                        idnaEncodeDomain = false;
                     }
-
-                    // Escape the characters (see Commonmark example 327 and think of it with a non-ascii symbol)
-                    int previousPosition = 0;
-                    for (int i = 0; i < domainName.Length; i++)
-                    {
-                        var escape = HtmlHelper.EscapeUrlCharacter(domainName[i]);
-                        if (escape != null)
-                        {
-                            Write(domainName, previousPosition, i - previousPosition);
-                            previousPosition = i + 1;
-                            Write(escape);
-                        }
-                    }
-                    Write(domainName, previousPosition, domainName.Length - previousPosition);
-                    WriteEscapeUrl(content, endOfDomain, content.Length);
                 }
-                else
+
+                if (!idnaEncodeDomain)
                 {
-                    WriteEscapeUrl(content, schemeOffset, content.Length);
+                    WriteEscapeUrl(content.AsSpan(schemeOffset), ref builder);
                 }
             }
             else // This is a relative URL
             {
-                WriteEscapeUrl(content, 0, content.Length);
+                WriteEscapeUrl(content.AsSpan(), ref builder);
             }
+
+            Write(builder.AsSpan());
+            builder.Dispose();
 
             return this;
         }
 
-        private void WriteEscapeUrl(string content, int start, int length)
+        private void WriteEscapeUrl(ReadOnlySpan<char> content, ref ValueStringBuilder vsb)
         {
-            int previousPosition = start;
-            for (var i = previousPosition; i < length; i++)
+            Span<byte> utf8Bytes = stackalloc byte[4];
+
+            for (int i = 0; i < content.Length; i++)
             {
-                var c = content[i];
+                char c = content[i];
 
-                if (c < 128)
+                if (!HtmlHelper.IsValidNonEscapedUrlCharacter(c))
                 {
-                    var escape = HtmlHelper.EscapeUrlCharacter(c);
-                    if (escape != null)
+                    if (c < 128)
                     {
-                        Write(content, previousPosition, i - previousPosition);
-                        previousPosition = i + 1;
-                        Write(escape);
-                    }
-                }
-                else
-                {
-                    Write(content, previousPosition, i - previousPosition);
-                    previousPosition = i + 1;
-
-                    // Special case for Edge/IE workaround for MarkdownEditor, don't escape non-ASCII chars to make image links working
-                    if (UseNonAsciiNoEscape)
-                    {
-                        Write(c);
-                    }
-                    else
-                    {
-                        byte[] bytes;
-                        if (c >= '\ud800' && c <= '\udfff' && previousPosition < length)
+                        if (c == '&')
                         {
-                            bytes = Encoding.UTF8.GetBytes(new[] { c, content[previousPosition] });
-                            // Skip next char as it is decoded above
-                            i++;
-                            previousPosition = i + 1;
+                            vsb.Append("&amp;");
                         }
                         else
                         {
-                            bytes = Encoding.UTF8.GetBytes(new[] { c });
+                            vsb.AppendEscaped(c);
                         }
-                        for (var j = 0; j < bytes.Length; j++)
+                        continue;
+                    }
+                    else if (!UseNonAsciiNoEscape)
+                    {
+                        Rune rune;
+                        if (CharHelper.IsHighSurrogate(c) && (uint)(i + 1) < (uint)content.Length && Rune.TryCreate(c, content[i + 1], out rune))
                         {
-                            Write($"%{bytes[j]:X2}");
+                            i++;
                         }
+                        else if (!Rune.TryCreate(c, out rune))
+                        {
+                            rune = Rune.ReplacementChar;
+                        }
+
+                        // The rune is non-ASCII, so encode it as UTF8, and escape each UTF8 byte.
+                        rune.TryEncodeToUtf8(utf8Bytes, out int bytesWritten);
+                        foreach (byte b in utf8Bytes.Slice(0, bytesWritten))
+                        {
+                            vsb.AppendEscaped(b);
+                        }
+
+                        continue;
                     }
                 }
+
+                vsb.Append(c);
             }
-            Write(content, previousPosition, length - previousPosition);
         }
 
         /// <summary>
