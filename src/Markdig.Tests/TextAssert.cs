@@ -2,6 +2,7 @@
 // This file is licensed under the BSD-Clause 2 license. 
 // See the license.txt file in the project root for more information.
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using NUnit.Framework;
@@ -12,6 +13,7 @@ namespace Markdig.Tests
     /// Pretty text assert from https://gist.github.com/Haacked/1610603
     /// Modified version to only print +-10 characters around the first diff
     /// </summary>
+    [ExcludeFromCodeCoverage]
     public static class TextAssert
     {
         public enum DiffStyle

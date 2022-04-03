@@ -3,9 +3,11 @@
 // See the license.txt file in the project root for more information.
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Markdig.Tests
 {
+    [ExcludeFromCodeCoverage]
     class Program
     {
         public static void Main(string[] args)

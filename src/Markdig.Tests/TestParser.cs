@@ -3,6 +3,7 @@
 // See the license.txt file in the project root for more information.
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -13,6 +14,7 @@ using NUnit.Framework;
 
 namespace Markdig.Tests
 {
+    [ExcludeFromCodeCoverage]
     public class TestParser
     {
         [Test]
