@@ -520,6 +520,13 @@ namespace Markdig.Helpers
 
         public static bool TryParseTitle<T>(ref T text, out string? title, out char enclosingCharacter) where T : ICharIterator
         {
+            StringChunk titleChunk = TryParseTitle(ref text, out enclosingCharacter);
+            title = titleChunk.ToString();
+            return title is not null;
+        }
+
+        internal static StringChunk TryParseTitle<T>(ref T text, out char enclosingCharacter) where T : ICharIterator
+        {
             var buffer = new ValueStringBuilder(stackalloc char[ValueStringBuilder.StackallocThreshold]);
             enclosingCharacter = '\0';
 
@@ -606,12 +613,10 @@ namespace Markdig.Helpers
             }
 
             buffer.Dispose();
-            title = null;
-            return false;
+            return default;
 
         ReturnValid:
-            title = buffer.ToString();
-            return true;
+            return new StringChunk(buffer.ToString());
         }
 
         public static bool TryParseTitleTrivia<T>(ref T text, out string? title, out char enclosingCharacter) where T : ICharIterator
@@ -717,11 +722,20 @@ namespace Markdig.Helpers
 
         public static bool TryParseUrl<T>(ref T text, [NotNullWhen(true)] out string? link, out bool hasPointyBrackets, bool isAutoLink = false) where T : ICharIterator
         {
+            StringChunk url = TryParseUrl(ref text, out hasPointyBrackets, isAutoLink);
+            link = url.ToString();
+            return link is not null;
+        }
+
+        internal static StringChunk TryParseUrl<T>(ref T text, out bool hasPointyBrackets, bool isAutoLink = false) where T : ICharIterator
+        {
             bool isValid = false;
             hasPointyBrackets = false;
+
             var buffer = new ValueStringBuilder(stackalloc char[ValueStringBuilder.StackallocThreshold]);
 
-            var c = text.CurrentChar;
+            int start = text.Start;
+            char c = text.CurrentChar;
 
             // a sequence of zero or more characters between an opening < and a closing > 
             // that contains no line breaks, or unescaped < or > characters, or
@@ -852,14 +866,13 @@ namespace Markdig.Helpers
 
             if (isValid)
             {
-                link = buffer.ToString();
+                return buffer.GetStringChunk(ref text, start);
             }
             else
             {
                 buffer.Dispose();
-                link = null;
+                return default;
             }
-            return isValid;
         }
 
         public static bool TryParseUrlTrivia<T>(ref T text, out string? link, out bool hasPointyBrackets, bool isAutoLink = false) where T : ICharIterator
@@ -1081,20 +1094,39 @@ namespace Markdig.Helpers
             out SourceSpan urlSpan,
             out SourceSpan titleSpan) where T : ICharIterator
         {
-            url = null;
-            title = null;
+            bool result = TryParseLinkReferenceDefinition(ref text,
+                out StringChunk labelChunk, out StringChunk urlChunk, out StringChunk titleChunk,
+                out labelSpan, out urlSpan, out titleSpan);
+
+            label = labelChunk.ToString();
+            url = urlChunk.ToString();
+            title = titleChunk.ToString();
+
+            return result;
+        }
+
+        internal static bool TryParseLinkReferenceDefinition<T>(ref T text,
+            out StringChunk label,
+            out StringChunk url,
+            out StringChunk title,
+            out SourceSpan labelSpan,
+            out SourceSpan urlSpan,
+            out SourceSpan titleSpan) where T : ICharIterator
+        {
+            url = default;
+            title = default;
 
             urlSpan = SourceSpan.Empty;
             titleSpan = SourceSpan.Empty;
 
-            if (!TryParseLabel(ref text, out label, out labelSpan))
+            label = TryParseLabel(ref text, allowEmpty: false, out labelSpan);
+            if (!label.HasValue)
             {
                 return false;
             }
 
             if (text.CurrentChar != ':')
             {
-                label = null;
                 return false;
             }
             text.SkipChar(); // Skip ':'
@@ -1104,10 +1136,13 @@ namespace Markdig.Helpers
 
             urlSpan.Start = text.Start;
             bool isAngleBracketsUrl = text.CurrentChar == '<';
-            if (!TryParseUrl(ref text, out url, out _) || (!isAngleBracketsUrl && string.IsNullOrEmpty(url)))
+
+            url = TryParseUrl(ref text, out _);
+            if (!url.HasValue || (!isAngleBracketsUrl && url.Length == 0))
             {
                 return false;
             }
+
             urlSpan.End = text.Start - 1;
 
             var saved = text;
@@ -1115,15 +1150,17 @@ namespace Markdig.Helpers
             var c = text.CurrentChar;
             if (c == '\'' || c == '"' || c == '(')
             {
+                // If we have a title, it requires a whitespace after the url
+                if (!hasWhiteSpaces)
+                {
+                    return false;
+                }
+
                 titleSpan.Start = text.Start;
-                if (TryParseTitle(ref text, out title, out _))
+                title = TryParseTitle(ref text, out _);
+                if (title.HasValue)
                 {
                     titleSpan.End = text.Start - 1;
-                    // If we have a title, it requires a whitespace after the url
-                    if (!hasWhiteSpaces)
-                    {
-                        return false;
-                    }
                 }
                 else
                 {
@@ -1149,16 +1186,13 @@ namespace Markdig.Helpers
             {
                 // If we were able to parse the url but the title doesn't end with space, 
                 // we are still returning a valid definition
-                if (newLineCount > 0 && title != null)
+                if (newLineCount > 0 && title.HasValue)
                 {
                     text = saved;
-                    title = null;
+                    title = default;
                     return true;
                 }
 
-                label = null;
-                url = null;
-                title = null;
                 return false;
             }
 
@@ -1354,12 +1388,18 @@ namespace Markdig.Helpers
 
         public static bool TryParseLabel<T>(ref T lines, bool allowEmpty, [NotNullWhen(true)] out string? label, out SourceSpan labelSpan) where T : ICharIterator
         {
-            label = null;
+            StringChunk labelChunk = TryParseLabel(ref lines, allowEmpty, out labelSpan);
+            label = labelChunk.ToString();
+            return label is not null;
+        }
+
+        internal static StringChunk TryParseLabel<T>(ref T lines, bool allowEmpty, out SourceSpan labelSpan) where T : ICharIterator
+        {
             char c = lines.CurrentChar;
             labelSpan = SourceSpan.Empty;
             if (c != '[')
             {
-                return false;
+                return default;
             }
             var buffer = new ValueStringBuilder(stackalloc char[ValueStringBuilder.StackallocThreshold]);
 
@@ -1460,11 +1500,10 @@ namespace Markdig.Helpers
             }
 
             buffer.Dispose();
-            return false;
+            return default;
 
         ReturnValid:
-            label = buffer.ToString();
-            return true;
+            return buffer.GetStringChunk(ref lines);
         }
 
         public static bool TryParseLabelTrivia<T>(ref T lines, bool allowEmpty, out string? label, out SourceSpan labelSpan) where T : ICharIterator

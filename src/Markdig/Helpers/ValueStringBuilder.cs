@@ -193,5 +193,19 @@ namespace Markdig.Helpers
                 ArrayPool<char>.Shared.Return(toReturn);
             }
         }
+
+        public StringChunk GetStringChunk<T>(ref T text, int startOffset) where T : ICharIterator
+        {
+            StringSlice firstSlice = text.GetFirstStringSlice();
+
+            if (firstSlice.End > startOffset &&
+                firstSlice.Text.AsSpan(startOffset).StartsWith(AsSpan(), StringComparison.Ordinal))
+            {
+                Dispose();
+                return new StringChunk(firstSlice.Text, startOffset, Length);
+            }
+
+            return new StringChunk(ToString());
+        }
     }
 }

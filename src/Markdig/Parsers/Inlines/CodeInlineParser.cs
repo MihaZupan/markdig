@@ -54,6 +54,7 @@ namespace Markdig.Parsers.Inlines
             // whitespace from the opening or closing backtick strings.
 
             bool allSpace = true;
+            bool inputMatchesBuilder = true;
             var contentEnd = -1;
 
             while (c != '\0')
@@ -62,6 +63,7 @@ namespace Markdig.Parsers.Inlines
                 if (c == '\n')
                 {
                     c = ' ';
+                    inputMatchesBuilder = false;
                 }
                 else if (c == '\r')
                 {
@@ -106,9 +108,10 @@ namespace Markdig.Parsers.Inlines
                     contentSpan = contentSpan.Slice(1, contentSpan.Length - 2);
                 }
 
-                string content = contentSpan.ToString();
+                StringChunk content = inputMatchesBuilder && slice.Start - contentStart - openSticks == contentSpan.Length
+                    ? new StringChunk(slice.Text, contentStart, contentSpan.Length)
+                    : new StringChunk(contentSpan.ToString());
 
-                int delimiterCount = Math.Min(openSticks, closeSticks);
                 var spanStart = processor.GetSourcePosition(startPosition, out int line, out int column);
                 var spanEnd = processor.GetSourcePosition(slice.Start - 1);
                 var codeInline = new CodeInline(content)
@@ -117,7 +120,7 @@ namespace Markdig.Parsers.Inlines
                     Span = new SourceSpan(spanStart, spanEnd),
                     Line = line,
                     Column = column,
-                    DelimiterCount = delimiterCount,
+                    DelimiterCount = openSticks,
                 };
 
                 if (processor.TrackTrivia)

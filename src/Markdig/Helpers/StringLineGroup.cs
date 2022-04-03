@@ -420,6 +420,8 @@ namespace Markdig.Helpers
                 }
                 return IsEmpty;
             }
+
+            public readonly StringSlice GetFirstStringSlice() => _currentSlice;
         }
 
         public readonly struct LineOffset

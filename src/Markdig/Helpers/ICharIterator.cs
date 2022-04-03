@@ -59,5 +59,7 @@ namespace Markdig.Helpers
         /// </summary>
         /// <returns><c>true</c> if it has reaches the end of the iterator</returns>
         bool TrimStart();
+
+        StringSlice GetFirstStringSlice();
     }
 }

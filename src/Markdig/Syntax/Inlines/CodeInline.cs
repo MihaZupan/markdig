@@ -3,6 +3,7 @@
 // See the license.txt file in the project root for more information.
 
 using Markdig.Helpers;
+using System;
 using System.Diagnostics;
 
 namespace Markdig.Syntax.Inlines
@@ -17,9 +18,16 @@ namespace Markdig.Syntax.Inlines
         private TriviaProperties? _trivia;
         private TriviaProperties Trivia => _trivia ??= new();
 
+        private StringChunk _content;
+
         public CodeInline(string content)
         {
             Content = content;
+        }
+
+        internal CodeInline(StringChunk content)
+        {
+            _content = content;
         }
 
         /// <summary>
@@ -35,7 +43,13 @@ namespace Markdig.Syntax.Inlines
         /// <summary>
         /// Gets or sets the content of the span.
         /// </summary>
-        public string Content { get; set; }
+        public string Content
+        {
+            get => _content.ToString();
+            set => _content = new StringChunk(value);
+        }
+
+        public ReadOnlySpan<char> ContentSpan => _content.AsSpan();
 
         /// <summary>
         /// Gets or sets the content with trivia and whitespace.

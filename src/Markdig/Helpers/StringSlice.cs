@@ -501,7 +501,7 @@ namespace Markdig.Helpers
             return true;
         }
 
-        public bool Overlaps(StringSlice other)
+        public readonly bool Overlaps(StringSlice other)
         {
             if (IsEmpty || other.IsEmpty)
             {
@@ -510,5 +510,7 @@ namespace Markdig.Helpers
 
             return Start <= other.End && End >= other.Start;
         }
+
+        public readonly StringSlice GetFirstStringSlice() => this;
     }
 }

@@ -19,6 +19,10 @@ namespace Markdig.Syntax
         private TriviaProperties? _trivia => TryGetDerivedTrivia<TriviaProperties>();
         private TriviaProperties Trivia => GetOrSetDerivedTrivia<TriviaProperties>();
 
+        private StringChunk _label;
+        private StringChunk _url;
+        private StringChunk _title;
+
         /// <summary>
         /// Creates an inline link for the specified <see cref="LinkReferenceDefinition"/>.
         /// </summary>
@@ -49,11 +53,22 @@ namespace Markdig.Syntax
             Title = title;
         }
 
+        internal LinkReferenceDefinition(StringChunk label, StringChunk url, StringChunk title) : this()
+        {
+            _label = label;
+            _url = url;
+            _title = title;
+        }
+
         /// <summary>
         /// Gets or sets the label. Text is normalized according to spec.
         /// </summary>
         /// https://spec.commonmark.org/0.29/#matches
-        public string? Label { get; set; }
+        public string? Label
+        {
+            get => _label.ToString();
+            set => _label = new StringChunk(value);
+        }
 
         /// <summary>
         /// The label span
@@ -77,7 +92,11 @@ namespace Markdig.Syntax
         /// <summary>
         /// Gets or sets the URL.
         /// </summary>
-        public string? Url { get; set; }
+        public string? Url
+        {
+            get => _url.ToString();
+            set => _url = new StringChunk(value);
+        }
 
         /// <summary>
         /// The URL span
@@ -108,7 +127,11 @@ namespace Markdig.Syntax
         /// <summary>
         /// Gets or sets the title.
         /// </summary>
-        public string? Title { get; set; }
+        public string? Title
+        {
+            get => _title.ToString();
+            set => _title = new StringChunk(value);
+        }
 
         /// <summary>
         /// The title span
@@ -149,7 +172,9 @@ namespace Markdig.Syntax
 
             var startSpan = text.Start;
 
-            if (!LinkHelper.TryParseLinkReferenceDefinition(ref text, out string? label, out string? url, out string? title, out SourceSpan labelSpan, out SourceSpan urlSpan, out SourceSpan titleSpan))
+            if (!LinkHelper.TryParseLinkReferenceDefinition(ref text,
+                out StringChunk label, out StringChunk url, out StringChunk title,
+                out SourceSpan labelSpan, out SourceSpan urlSpan, out SourceSpan titleSpan))
             {
                 return false;
             }
