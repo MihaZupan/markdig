@@ -18,10 +18,6 @@ namespace Markdig.Tests
         [Test]
         public void EnsureSpecsAreUpToDate()
         {
-            // In CI, SpecFileGen is guaranteed to run
-            if (IsContinuousIntegration)
-                return;
-
             var specsFilePaths = Directory.GetDirectories(TestsDirectory)
                 .Where(dir => dir.EndsWith("Specs"))
                 .SelectMany(dir => Directory.GetFiles(dir)
@@ -40,7 +36,12 @@ namespace Markdig.Tests
             {
                 string markdown = specsMarkdown[i] = File.ReadAllText(specsFilePaths[i]);
                 specsSyntaxTrees[i] = Markdown.Parse(markdown, pipeline);
+                TestDescendantsOrder.TestSchemas(specsSyntaxTrees[i]);
             }
+
+            // In CI, SpecFileGen is guaranteed to run
+            if (IsContinuousIntegration)
+                return;
 
             foreach (var specFilePath in specsFilePaths)
             {
@@ -63,8 +64,6 @@ namespace Markdig.Tests
                     $"{Path.GetFileName(specFilePath)} has been modified. Run SpecFileGen to regenerate the tests. " +
                     "If you have modified a specification file, but reverted all changes, ignore this error or revert the 'changed' timestamp metadata on the file.");
             }
-
-            TestDescendantsOrder.TestSchemas(specsSyntaxTrees);
         }
 
         public static void TestSpec(string inputText, string expectedOutputText, string extensions = null, bool plainText = false, string context = null)

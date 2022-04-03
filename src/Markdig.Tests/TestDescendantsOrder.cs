@@ -10,79 +10,76 @@ namespace Markdig.Tests
     [TestFixture]
     public class TestDescendantsOrder
     {
-        public static void TestSchemas(MarkdownDocument[] specsSyntaxTrees)
+        public static void TestSchemas(MarkdownDocument syntaxTree)
         {
-            foreach (var syntaxTree in specsSyntaxTrees)
+            AssertIEnumerablesAreEqual(
+                Descendants_Legacy(syntaxTree),
+                syntaxTree.Descendants());
+
+            AssertIEnumerablesAreEqual(
+                syntaxTree.Descendants().OfType<ParagraphBlock>(),
+                syntaxTree.Descendants<ParagraphBlock>());
+
+            AssertIEnumerablesAreEqual(
+                syntaxTree.Descendants().OfType<ParagraphBlock>(),
+                (syntaxTree as ContainerBlock).Descendants<ParagraphBlock>());
+
+            AssertIEnumerablesAreEqual(
+                syntaxTree.Descendants().OfType<LiteralInline>(),
+                syntaxTree.Descendants<LiteralInline>());
+
+            foreach (LiteralInline literalInline in syntaxTree.Descendants<LiteralInline>())
+            {
+                Assert.AreSame(ArrayHelper.Empty<ListBlock>(), literalInline.Descendants<ListBlock>());
+                Assert.AreSame(ArrayHelper.Empty<ParagraphBlock>(), literalInline.Descendants<ParagraphBlock>());
+                Assert.AreSame(ArrayHelper.Empty<ContainerInline>(), literalInline.Descendants<ContainerInline>());
+            }
+
+            foreach (ContainerInline containerInline in syntaxTree.Descendants<ContainerInline>())
             {
                 AssertIEnumerablesAreEqual(
-                    Descendants_Legacy(syntaxTree),
-                    syntaxTree.Descendants());
+                    containerInline.FindDescendants<LiteralInline>(),
+                    containerInline.Descendants<LiteralInline>());
 
                 AssertIEnumerablesAreEqual(
-                    syntaxTree.Descendants().OfType<ParagraphBlock>(),
-                    syntaxTree.Descendants<ParagraphBlock>());
+                    containerInline.FindDescendants<LiteralInline>(),
+                    (containerInline as MarkdownObject).Descendants<LiteralInline>());
+
+                if (containerInline.FirstChild is null)
+                {
+                    Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), containerInline.Descendants<LiteralInline>());
+                    Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), containerInline.FindDescendants<LiteralInline>());
+                    Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), (containerInline as MarkdownObject).Descendants<LiteralInline>());
+                }
+
+                Assert.AreSame(ArrayHelper.Empty<ListBlock>(), containerInline.Descendants<ListBlock>());
+                Assert.AreSame(ArrayHelper.Empty<ParagraphBlock>(), containerInline.Descendants<ParagraphBlock>());
+            }
+
+            foreach (ParagraphBlock paragraphBlock in syntaxTree.Descendants<ParagraphBlock>())
+            {
+                AssertIEnumerablesAreEqual(
+                    (paragraphBlock as MarkdownObject).Descendants<LiteralInline>(),
+                    paragraphBlock.Descendants<LiteralInline>());
+
+                Assert.AreSame(ArrayHelper.Empty<ParagraphBlock>(), paragraphBlock.Descendants<ParagraphBlock>());
+            }
+
+            foreach (ContainerBlock containerBlock in syntaxTree.Descendants<ContainerBlock>())
+            {
+                AssertIEnumerablesAreEqual(
+                    containerBlock.Descendants<LiteralInline>(),
+                    (containerBlock as MarkdownObject).Descendants<LiteralInline>());
 
                 AssertIEnumerablesAreEqual(
-                    syntaxTree.Descendants().OfType<ParagraphBlock>(),
-                    (syntaxTree as ContainerBlock).Descendants<ParagraphBlock>());
+                    containerBlock.Descendants<ParagraphBlock>(),
+                    (containerBlock as MarkdownObject).Descendants<ParagraphBlock>());
 
-                AssertIEnumerablesAreEqual(
-                    syntaxTree.Descendants().OfType<LiteralInline>(),
-                    syntaxTree.Descendants<LiteralInline>());
-
-                foreach (LiteralInline literalInline in syntaxTree.Descendants<LiteralInline>())
+                if (containerBlock.Count == 0)
                 {
-                    Assert.AreSame(ArrayHelper.Empty<ListBlock>(), literalInline.Descendants<ListBlock>());
-                    Assert.AreSame(ArrayHelper.Empty<ParagraphBlock>(), literalInline.Descendants<ParagraphBlock>());
-                    Assert.AreSame(ArrayHelper.Empty<ContainerInline>(), literalInline.Descendants<ContainerInline>());
-                }
-
-                foreach (ContainerInline containerInline in syntaxTree.Descendants<ContainerInline>())
-                {
-                    AssertIEnumerablesAreEqual(
-                        containerInline.FindDescendants<LiteralInline>(),
-                        containerInline.Descendants<LiteralInline>());
-
-                    AssertIEnumerablesAreEqual(
-                        containerInline.FindDescendants<LiteralInline>(),
-                        (containerInline as MarkdownObject).Descendants<LiteralInline>());
-
-                    if (containerInline.FirstChild is null)
-                    {
-                        Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), containerInline.Descendants<LiteralInline>());
-                        Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), containerInline.FindDescendants<LiteralInline>());
-                        Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), (containerInline as MarkdownObject).Descendants<LiteralInline>());
-                    }
-
-                    Assert.AreSame(ArrayHelper.Empty<ListBlock>(), containerInline.Descendants<ListBlock>());
-                    Assert.AreSame(ArrayHelper.Empty<ParagraphBlock>(), containerInline.Descendants<ParagraphBlock>());
-                }
-
-                foreach (ParagraphBlock paragraphBlock in syntaxTree.Descendants<ParagraphBlock>())
-                {
-                    AssertIEnumerablesAreEqual(
-                        (paragraphBlock as MarkdownObject).Descendants<LiteralInline>(),
-                        paragraphBlock.Descendants<LiteralInline>());
-
-                    Assert.AreSame(ArrayHelper.Empty<ParagraphBlock>(), paragraphBlock.Descendants<ParagraphBlock>());
-                }
-
-                foreach (ContainerBlock containerBlock in syntaxTree.Descendants<ContainerBlock>())
-                {
-                    AssertIEnumerablesAreEqual(
-                        containerBlock.Descendants<LiteralInline>(),
-                        (containerBlock as MarkdownObject).Descendants<LiteralInline>());
-
-                    AssertIEnumerablesAreEqual(
-                        containerBlock.Descendants<ParagraphBlock>(),
-                        (containerBlock as MarkdownObject).Descendants<ParagraphBlock>());
-
-                    if (containerBlock.Count == 0)
-                    {
-                        Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), containerBlock.Descendants<LiteralInline>());
-                        Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), (containerBlock as Block).Descendants<LiteralInline>());
-                        Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), (containerBlock as MarkdownObject).Descendants<LiteralInline>());
-                    }
+                    Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), containerBlock.Descendants<LiteralInline>());
+                    Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), (containerBlock as Block).Descendants<LiteralInline>());
+                    Assert.AreSame(ArrayHelper.Empty<LiteralInline>(), (containerBlock as MarkdownObject).Descendants<LiteralInline>());
                 }
             }
         }
