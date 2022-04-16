@@ -19,7 +19,7 @@ namespace Markdig.Parsers
     /// <summary>
     /// The Markdown parser.
     /// </summary>
-    public static class MarkdownParser
+    internal static class MarkdownParser
     {
         /// <summary>
         /// Parses the specified markdown into an AST <see cref="MarkdownDocument"/>
