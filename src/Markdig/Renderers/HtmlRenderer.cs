@@ -44,7 +44,7 @@ namespace Markdig.Renderers
             ObjectRenderers.Add(new EmphasisInlineRenderer());
             ObjectRenderers.Add(new LineBreakInlineRenderer());
             ObjectRenderers.Add(new HtmlInlineRenderer());
-            ObjectRenderers.Add(new HtmlEntityInlineRenderer());            
+            ObjectRenderers.Add(new HtmlEntityInlineRenderer());
             ObjectRenderers.Add(new LinkInlineRenderer());
             ObjectRenderers.Add(new LiteralInlineRenderer());
 
@@ -149,69 +149,70 @@ namespace Markdig.Renderers
         {
             if (!content.IsEmpty)
             {
-                int nextIndex = content.IndexOfAny(s_writeEscapeIndexOfAnyChars);
+                int nextIndex = softEscape
+                    ? content.IndexOfAny('<', '&')
+                    : content.IndexOfAny(s_writeEscapeIndexOfAnyChars);
+
                 if (nextIndex == -1)
                 {
                     Write(content);
                 }
                 else
                 {
-                    WriteEscapeSlow(content, softEscape);
+                    WriteEscapeSlow(content, nextIndex, softEscape);
                 }
             }
         }
 
-        private void WriteEscapeSlow(ReadOnlySpan<char> content, bool softEscape = false)
+        private void WriteEscapeSlow(ReadOnlySpan<char> content, int nextIndex, bool softEscape = false)
         {
             WriteIndent();
 
-            int previousOffset = 0;
-            for (int i = 0; i < content.Length; i++)
+            do
             {
-                switch (content[i])
+                WriteRaw(content.Slice(0, nextIndex));
+
+                char c = content[nextIndex];
+                content = content.Slice(nextIndex + 1);
+
+                switch (c)
                 {
                     case '<':
-                        WriteRaw(content.Slice(previousOffset, i - previousOffset));
                         if (EnableHtmlEscape)
                         {
                             WriteRaw("&lt;");
                         }
-                        previousOffset = i + 1;
                         break;
+
                     case '>':
-                        if (!softEscape)
+                        if (EnableHtmlEscape)
                         {
-                            WriteRaw(content.Slice(previousOffset, i - previousOffset));
-                            if (EnableHtmlEscape)
-                            {
-                                WriteRaw("&gt;");
-                            }
-                            previousOffset = i + 1;
+                            WriteRaw("&gt;");
                         }
                         break;
+
                     case '&':
-                        WriteRaw(content.Slice(previousOffset, i - previousOffset));
                         if (EnableHtmlEscape)
                         {
                             WriteRaw("&amp;");
                         }
-                        previousOffset = i + 1;
                         break;
+
                     case '"':
-                        if (!softEscape)
+                        if (EnableHtmlEscape)
                         {
-                            WriteRaw(content.Slice(previousOffset, i - previousOffset));
-                            if (EnableHtmlEscape)
-                            {
-                                WriteRaw("&quot;");
-                            }
-                            previousOffset = i + 1;
+                            WriteRaw("&quot;");
                         }
                         break;
                 }
-            }
 
-            WriteRaw(content.Slice(previousOffset));
+                nextIndex = softEscape
+                    ? content.IndexOfAny('<', '&')
+                    : content.IndexOfAny(s_writeEscapeIndexOfAnyChars);
+            }
+            while (nextIndex >= 0);
+
+            WriteRaw(content);
         }
 
         private static readonly IdnMapping IdnMapping = new IdnMapping();
