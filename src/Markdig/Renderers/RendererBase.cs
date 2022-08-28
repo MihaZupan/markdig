@@ -4,7 +4,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using Markdig.Helpers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -17,7 +20,16 @@ namespace Markdig.Renderers
     /// <seealso cref="IMarkdownRenderer" />
     public abstract class RendererBase : IMarkdownRenderer
     {
-        private readonly Dictionary<KeyWrapper, IMarkdownObjectRenderer?> _renderersPerType = new();
+        private sealed class TypeInfo
+        {
+            public IMarkdownObjectRenderer? Renderer;
+            public int SeenCount;
+        }
+
+        private (IntPtr Key, IMarkdownObjectRenderer? Renderer)[] _renderersPerType = ArrayHelper.Empty<(IntPtr, IMarkdownObjectRenderer?)>();
+        private readonly Dictionary<IntPtr, TypeInfo> _typeStats = new();
+        private int _objectsSinceUnknownType = 0;
+
         internal int _childrenDepth = 0;
 
         /// <summary>
@@ -27,21 +39,55 @@ namespace Markdig.Renderers
 
         private IMarkdownObjectRenderer? GetRendererInstance(MarkdownObject obj)
         {
-            KeyWrapper key = GetKeyForType(obj);
-            Type objectType = obj.GetType();
+            TypeInfo? typeInfo;
 
-            for (int i = 0; i < ObjectRenderers.Count; i++)
+            lock (_typeStats)
             {
-                var renderer = ObjectRenderers[i];
-                if (renderer.Accept(this, objectType))
+                IntPtr key = GetKeyForType(obj);
+                if (_typeStats.TryGetValue(key, out typeInfo))
                 {
-                    _renderersPerType[key] = renderer;
-                    return renderer;
+                    if (++_objectsSinceUnknownType == 10_000)
+                    {
+                        UpdateRenderersArray();
+                    }
+                }
+                else
+                {
+                    _objectsSinceUnknownType = 0;
+                    _renderersPerType = ArrayHelper.Empty<(IntPtr, IMarkdownObjectRenderer?)>();
+
+                    typeInfo = new TypeInfo();
+                    _typeStats.Add(key, typeInfo);
                 }
             }
 
-            _renderersPerType[key] = null;
-            return null;
+            Interlocked.Increment(ref typeInfo.SeenCount);
+
+            return typeInfo.Renderer ??= FindRenderer(obj);
+
+            IMarkdownObjectRenderer? FindRenderer(MarkdownObject obj)
+            {
+                Type objectType = obj.GetType();
+                for (int i = 0; i < ObjectRenderers.Count; i++)
+                {
+                    var renderer = ObjectRenderers[i];
+                    if (renderer.Accept(this, objectType))
+                    {
+                        return renderer;
+                    }
+                }
+                return null;
+            }
+
+            void UpdateRenderersArray()
+            {
+                Debug.Assert(Monitor.IsEntered(_typeStats));
+
+                _renderersPerType = _typeStats
+                    .OrderByDescending(e => e.Value.SeenCount)
+                    .Select(e => (e.Key, e.Value.Renderer))
+                    .ToArray();
+            }
         }
 
         public ObjectRendererCollection ObjectRenderers { get; } = new();
@@ -78,12 +124,11 @@ namespace Markdig.Renderers
             bool saveIsFirstInContainer = IsFirstInContainer;
             bool saveIsLastInContainer = IsLastInContainer;
 
-            var children = containerBlock;
-            for (int i = 0; i < children.Count; i++)
+            for (int i = 0; i < containerBlock.Count; i++)
             {
                 IsFirstInContainer = i == 0;
-                IsLastInContainer = i + 1 == children.Count;
-                Write(children[i]);
+                IsLastInContainer = i + 1 == containerBlock.Count;
+                Write(containerBlock[i]);
             }
 
             IsFirstInContainer = saveIsFirstInContainer;
@@ -141,10 +186,21 @@ namespace Markdig.Renderers
             // Calls before writing an object
             ObjectWriteBefore?.Invoke(this, obj);
 
-            if (!_renderersPerType.TryGetValue(GetKeyForType(obj), out IMarkdownObjectRenderer? renderer))
+            IMarkdownObjectRenderer? renderer = null;
+            IntPtr key = GetKeyForType(obj);
+
+            foreach (var (Key, Renderer) in _renderersPerType)
             {
-                renderer = GetRendererInstance(obj);
+                if (key == Key)
+                {
+                    renderer = Renderer;
+                    goto Render;
+                }
             }
+
+            renderer = GetRendererInstance(obj);
+
+        Render:
 
             if (renderer is not null)
             {
@@ -164,23 +220,9 @@ namespace Markdig.Renderers
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static KeyWrapper GetKeyForType(MarkdownObject obj)
+        private static IntPtr GetKeyForType(MarkdownObject obj)
         {
-            IntPtr typeHandle = Type.GetTypeHandle(obj).Value;
-            return new KeyWrapper(typeHandle);
-        }
-
-        private readonly struct KeyWrapper : IEquatable<KeyWrapper>
-        {
-            public readonly IntPtr Key;
-
-            public KeyWrapper(IntPtr key) => Key = key;
-
-            public bool Equals(KeyWrapper other) => Key == other.Key;
-
-            public override int GetHashCode() => Key.GetHashCode();
-
-            public override bool Equals(object? obj) => throw new NotImplementedException();
+            return Type.GetTypeHandle(obj).Value;
         }
     }
 }
