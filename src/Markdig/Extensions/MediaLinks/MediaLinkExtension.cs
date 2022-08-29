@@ -3,6 +3,8 @@
 // See the license.txt file in the project root for more information.
 
 using System;
+using System.Collections.Generic;
+using Markdig.Helpers;
 using Markdig.Renderers;
 using Markdig.Renderers.Html;
 using Markdig.Renderers.Html.Inlines;
@@ -16,13 +18,22 @@ namespace Markdig.Extensions.MediaLinks
     /// <seealso cref="IMarkdownExtension" />
     public class MediaLinkExtension : IMarkdownExtension
     {
-        public MediaLinkExtension() : this(new MediaOptions())
+        private readonly CompactPrefixTree<string> _extensionToMimeType;
+
+        public MediaLinkExtension() : this(null)
         {
         }
 
         public MediaLinkExtension(MediaOptions? options)
         {
             Options = options ?? new MediaOptions();
+
+            Dictionary<string, string> input = Options.ExtensionToMimeType;
+            _extensionToMimeType = new CompactPrefixTree<string>(input.Count, input.Count * 2, input.Count * 2);
+            foreach (var pair in input)
+            {
+                _extensionToMimeType.Add(pair.Key.Substring(1).ToLowerInvariant(), pair.Value.ToLowerInvariant());
+            }
         }
 
         public MediaOptions Options { get; }
@@ -72,7 +83,7 @@ namespace Markdig.Extensions.MediaLinks
                 return true;
             }
 
-            if (TryGuessAudioVideoFile(uri, isSchemaRelative, renderer, linkInline))
+            if (TryGuessAudioVideoFile(uri.OriginalString, renderer, linkInline))
             {
                 return true;
             }
@@ -92,19 +103,34 @@ namespace Markdig.Extensions.MediaLinks
             return htmlAttributes;
         }
 
-        private bool TryGuessAudioVideoFile(Uri uri, bool isSchemaRelative, HtmlRenderer renderer, LinkInline linkInline)
+        private bool TryGuessAudioVideoFile(string uri, HtmlRenderer renderer, LinkInline linkInline)
         {
-            var path = uri.GetComponents(UriComponents.Path, UriFormat.Unescaped);
-            // Otherwise try to detect if we have an audio/video from the file extension
-            var lastDot = path.LastIndexOf('.');
-            if (lastDot >= 0 &&
-                Options.ExtensionToMimeType.TryGetValue(path.Substring(lastDot), out string? mimeType))
+            // Try to detect if we have an audio/video from the file extension
+            int lastDot = uri.LastIndexOf('.');
+            if (lastDot < 0)
             {
+                return false;
+            }
+
+            ReadOnlySpan<char> extension = uri.AsSpan(lastDot + 1);
+            if (extension.Length > 16)
+            {
+                return false;
+            }
+
+            Span<char> extensionLowerCase = stackalloc char[16];
+            extensionLowerCase = extensionLowerCase.Slice(0, extension.ToLowerInvariant(extensionLowerCase));
+
+            if (_extensionToMimeType.TryMatchExact(extensionLowerCase, out var match))
+            {
+                string mimeType = match.Value;
                 var htmlAttributes = GetHtmlAttributes(linkInline);
                 var isAudio = mimeType.StartsWith("audio", StringComparison.Ordinal);
                 var tagType = isAudio ? "audio" : "video";
 
-                renderer.Write($"<{tagType}");
+                renderer.Write('<');
+                renderer.WriteRaw(tagType);
+
                 htmlAttributes.AddPropertyIfNotExist("width", Options.Width);
                 if (!isAudio)
                 {
@@ -117,7 +143,13 @@ namespace Markdig.Extensions.MediaLinks
 
                 renderer.WriteAttributes(htmlAttributes);
 
-                renderer.Write($"><source type=\"{mimeType}\" src=\"{linkInline.Url}\"></source></{tagType}>");
+                renderer.Write("><source type=\"");
+                renderer.WriteRaw(mimeType);
+                renderer.WriteRaw("\" src=\"");
+                renderer.WriteRaw(linkInline.Url);
+                renderer.WriteRaw("\"></source></");
+                renderer.WriteRaw(tagType);
+                renderer.WriteRaw('>');
 
                 return true;
             }
