@@ -22,11 +22,18 @@ namespace Markdig.Renderers
     {
         private sealed class TypeInfo
         {
+            public Type Type;
             public IMarkdownObjectRenderer? Renderer;
             public int SeenCount;
+
+            public TypeInfo(Type type, IMarkdownObjectRenderer? renderer)
+            {
+                Type = type;
+                Renderer = renderer;
+            }
         }
 
-        private (IntPtr Key, IMarkdownObjectRenderer? Renderer)[] _renderersPerType = ArrayHelper.Empty<(IntPtr, IMarkdownObjectRenderer?)>();
+        private (IntPtr Key, Action<RendererBase, MarkdownObject> Renderer)[] _renderersPerType = ArrayHelper.Empty<(IntPtr, Action<RendererBase, MarkdownObject>)>();
         private readonly Dictionary<IntPtr, TypeInfo> _typeStats = new();
         private int _objectsSinceUnknownType = 0;
 
@@ -37,7 +44,7 @@ namespace Markdig.Renderers
         /// </summary>
         protected RendererBase() { }
 
-        private IMarkdownObjectRenderer? GetRendererInstance(MarkdownObject obj)
+        private void WriteUnknownType(MarkdownObject obj)
         {
             TypeInfo? typeInfo;
 
@@ -54,20 +61,36 @@ namespace Markdig.Renderers
                 else
                 {
                     _objectsSinceUnknownType = 0;
-                    _renderersPerType = ArrayHelper.Empty<(IntPtr, IMarkdownObjectRenderer?)>();
-
-                    typeInfo = new TypeInfo();
+                    _renderersPerType = ArrayHelper.Empty<(IntPtr, Action<RendererBase, MarkdownObject>)>();
+                    Type objectType = obj.GetType();
+                    typeInfo = new TypeInfo(objectType, FindRenderer(objectType));
                     _typeStats.Add(key, typeInfo);
                 }
             }
 
             Interlocked.Increment(ref typeInfo.SeenCount);
 
-            return typeInfo.Renderer ??= FindRenderer(obj);
+            ObjectWriteBefore?.Invoke(this, obj);
 
-            IMarkdownObjectRenderer? FindRenderer(MarkdownObject obj)
+            IMarkdownObjectRenderer? renderer = typeInfo.Renderer;
+
+            if (renderer is not null)
             {
-                Type objectType = obj.GetType();
+                renderer.Write(this, obj);
+            }
+            else if (obj.IsContainerInline)
+            {
+                WriteChildren(Unsafe.As<ContainerInline>(obj));
+            }
+            else if (obj.IsContainerBlock)
+            {
+                WriteChildren(Unsafe.As<ContainerBlock>(obj));
+            }
+
+            ObjectWriteAfter?.Invoke(this, obj);
+
+            IMarkdownObjectRenderer? FindRenderer(Type objectType)
+            {
                 for (int i = 0; i < ObjectRenderers.Count; i++)
                 {
                     var renderer = ObjectRenderers[i];
@@ -82,11 +105,94 @@ namespace Markdig.Renderers
             void UpdateRenderersArray()
             {
                 Debug.Assert(Monitor.IsEntered(_typeStats));
-
                 _renderersPerType = _typeStats
                     .OrderByDescending(e => e.Value.SeenCount)
-                    .Select(e => (e.Key, e.Value.Renderer))
+                    .Select(e => (e.Key, GetRenderActionForType(e.Value)))
                     .ToArray();
+            }
+        }
+
+        private Action<RendererBase, MarkdownObject> GetRenderActionForType(TypeInfo typeInfo)
+        {
+            Type objectType = typeInfo.Type;
+            IMarkdownObjectRenderer? renderer = typeInfo.Renderer;
+            bool beforeAfterWriteCallbacks = ObjectWriteBefore is not null || ObjectWriteAfter is not null;
+
+            if (renderer is not null)
+            {
+                if (renderer is TypedMarkdownObjectRenderer typedRenderer &&
+                    typedRenderer.RendererType is not null &&
+                    typedRenderer.RendererType.IsAssignableFrom(GetType()))
+                {
+                    // Derived from MarkdownObjectRenderer<TRenderer, TObject>
+                    // We have internal knowledge that can let us skip type checks
+                    if (typedRenderer.ShouldUseTryWriters)
+                    {
+                        return beforeAfterWriteCallbacks
+                            ? (thisRef, obj) =>
+                            {
+                                thisRef.ObjectWriteBefore?.Invoke(thisRef, obj);
+                                typedRenderer.WriteWithoutTypeChecks(thisRef, obj);
+                                thisRef.ObjectWriteAfter?.Invoke(thisRef, obj);
+                            }
+                            : (thisRef, obj) => typedRenderer.WriteWithoutTypeChecks(thisRef, obj);
+                    }
+                    else
+                    {
+                        return beforeAfterWriteCallbacks
+                            ? (thisRef, obj) =>
+                            {
+                                thisRef.ObjectWriteBefore?.Invoke(thisRef, obj);
+                                typedRenderer.WriteWithoutTypeChecksOrTryWriters(thisRef, obj);
+                                thisRef.ObjectWriteAfter?.Invoke(thisRef, obj);
+                            }
+                            : (thisRef, obj) => typedRenderer.WriteWithoutTypeChecksOrTryWriters(thisRef, obj);
+                    }
+                }
+                else
+                {
+                    // Custom renderer
+                    return beforeAfterWriteCallbacks
+                        ? (thisRef, obj) =>
+                        {
+                            thisRef.ObjectWriteBefore?.Invoke(thisRef, obj);
+                            renderer.Write(thisRef, obj);
+                            thisRef.ObjectWriteAfter?.Invoke(thisRef, obj);
+                        }
+                        : (thisRef, obj) => renderer.Write(thisRef, obj);
+                }
+            }
+            else if (typeof(ContainerInline).IsAssignableFrom(objectType))
+            {
+                return beforeAfterWriteCallbacks
+                    ? static (thisRef, obj) =>
+                    {
+                        thisRef.ObjectWriteBefore?.Invoke(thisRef, obj);
+                        thisRef.WriteChildren(Unsafe.As<ContainerInline>(obj));
+                        thisRef.ObjectWriteAfter?.Invoke(thisRef, obj);
+                    }
+                    : static (thisRef, obj) => thisRef.WriteChildren(Unsafe.As<ContainerInline>(obj));
+            }
+            else if (typeof(ContainerBlock).IsAssignableFrom(objectType))
+            {
+                return beforeAfterWriteCallbacks
+                    ? static (thisRef, obj) =>
+                    {
+                        thisRef.ObjectWriteBefore?.Invoke(thisRef, obj);
+                        thisRef.WriteChildren(Unsafe.As<ContainerBlock>(obj));
+                        thisRef.ObjectWriteAfter?.Invoke(thisRef, obj);
+                    }
+                    : static (thisRef, obj) => thisRef.WriteChildren(Unsafe.As<ContainerBlock>(obj));
+            }
+            else
+            {
+                return beforeAfterWriteCallbacks
+                    ? static (thisRef, obj) =>
+                    {
+                        thisRef.ObjectWriteBefore?.Invoke(thisRef, obj);
+                        thisRef.ObjectWriteAfter?.Invoke(thisRef, obj);
+                    }
+                    : static (thisRef, obj) => { };
             }
         }
 
@@ -183,40 +289,18 @@ namespace Markdig.Renderers
                 return;
             }
 
-            // Calls before writing an object
-            ObjectWriteBefore?.Invoke(this, obj);
-
-            IMarkdownObjectRenderer? renderer = null;
             IntPtr key = GetKeyForType(obj);
 
             foreach (var (Key, Renderer) in _renderersPerType)
             {
                 if (key == Key)
                 {
-                    renderer = Renderer;
-                    goto Render;
+                    Renderer(this, obj);
+                    return;
                 }
             }
 
-            renderer = GetRendererInstance(obj);
-
-        Render:
-
-            if (renderer is not null)
-            {
-                renderer.Write(this, obj);
-            }
-            else if (obj.IsContainerInline)
-            {
-                WriteChildren(Unsafe.As<ContainerInline>(obj));
-            }
-            else if (obj.IsContainerBlock)
-            {
-                WriteChildren(Unsafe.As<ContainerBlock>(obj));
-            }
-
-            // Calls after writing an object
-            ObjectWriteAfter?.Invoke(this, obj);
+            WriteUnknownType(obj);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
