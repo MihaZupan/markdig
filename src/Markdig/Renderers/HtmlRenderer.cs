@@ -601,19 +601,19 @@ namespace Markdig.Renderers
                 return this;
             }
 
-            if (attributes.Id != null)
+            if (attributes.Id is { } id)
             {
                 Write(" id=\"");
-                WriteEscape(attributes.Id);
+                WriteEscape(id);
                 WriteRaw('"');
             }
 
-            if (attributes.Classes is { Count: > 0 })
+            if (attributes.Classes is { Count: > 0 } classes)
             {
                 Write(" class=\"");
-                for (int i = 0; i < attributes.Classes.Count; i++)
+                for (int i = 0; i < classes.Count; i++)
                 {
-                    var cssClass = attributes.Classes[i];
+                    var cssClass = classes[i];
                     if (i > 0)
                     {
                         WriteRaw(' ');
@@ -623,9 +623,9 @@ namespace Markdig.Renderers
                 WriteRaw('"');
             }
 
-            if (attributes.Properties is { Count: > 0 })
+            if (attributes.Properties is { Count: > 0 } properties)
             {
-                foreach (var property in attributes.Properties)
+                foreach (var property in properties)
                 {
                     Write(' ');
                     WriteRaw(property.Key);
