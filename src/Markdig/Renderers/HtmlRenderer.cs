@@ -3,6 +3,7 @@
 // See the license.txt file in the project root for more information.
 
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -11,6 +12,12 @@ using Markdig.Helpers;
 using Markdig.Renderers.Html;
 using Markdig.Renderers.Html.Inlines;
 using Markdig.Syntax;
+#if NETCOREAPP3_1_OR_GREATER
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
+using System.Runtime.Intrinsics;
+#endif
 
 namespace Markdig.Renderers
 {
@@ -20,6 +27,7 @@ namespace Markdig.Renderers
     /// <seealso cref="TextRendererBase{HtmlRenderer}" />
     public class HtmlRenderer : TextRendererBase<HtmlRenderer>
     {
+        private static readonly IdnMapping s_idnMapping = new();
         private static readonly char[] s_writeEscapeIndexOfAnyChars = new[] { '<', '>', '&', '"' };
 
         /// <summary>
@@ -215,8 +223,6 @@ namespace Markdig.Renderers
             WriteRaw(content);
         }
 
-        private static readonly IdnMapping IdnMapping = new IdnMapping();
-
         /// <summary>
         /// Writes the URL escaped for HTML.
         /// </summary>
@@ -227,7 +233,7 @@ namespace Markdig.Renderers
             if (content is null)
                 return this;
 
-            if (BaseUrl != null
+            if (BaseUrl is not null
                 // According to https://github.com/dotnet/runtime/issues/22718
                 // this is the proper cross-platform way to check whether a uri is absolute or not:
                 && Uri.TryCreate(content, UriKind.RelativeOrAbsolute, out var contentUri) && !contentUri.IsAbsoluteUri)
@@ -235,126 +241,341 @@ namespace Markdig.Renderers
                 content = new Uri(BaseUrl, contentUri).AbsoluteUri;
             }
 
-            if (LinkRewriter != null)
+            if (LinkRewriter is not null)
             {
                 content = LinkRewriter(content);
             }
 
-            // a://c.d = 7 chars
-            int schemeOffset = content.Length < 7 ? -1 : content.IndexOf("://", StringComparison.Ordinal);
-            if (schemeOffset != -1) // This is an absolute URL
+            for (int i = 0; i < content.Length; i++)
             {
-                schemeOffset += 3; // skip ://
-                WriteEscapeUrl(content, 0, schemeOffset);
-
-                bool idnaEncodeDomain = false;
-                int endOfDomain = schemeOffset;
-                for (; endOfDomain < content.Length; endOfDomain++)
+                if (content[i] == ':')
                 {
-                    char c = content[endOfDomain];
-                    if (c == '/' || c == '?' || c == '#' || c == ':') // End of domain part
+                    if ((uint)(i + 2) < (uint)content.Length &&
+                        (uint)(i + 1) < (uint)content.Length &&
+                        content[i + 1] == '/' &&
+                        content[i + 2] == '/')
                     {
-                        break;
-                    }
-                    if (c > 127)
-                    {
-                        idnaEncodeDomain = true;
-                    }
-                }
+                        int schemeLength = i + 3; // Skip "://"
 
-                if (idnaEncodeDomain)
-                {
-                    string domainName;
+                        (int domainNameLength, bool idnaEncodeDomain) = ScanDomainName(content.AsSpan(schemeLength));
 
-                    try
-                    {
-                        domainName = IdnMapping.GetAscii(content, schemeOffset, endOfDomain - schemeOffset);
-                    }
-                    catch
-                    {
-                        // Not a valid IDN, fallback to non-punycode encoding
-                        WriteEscapeUrl(content, schemeOffset, content.Length);
-                        return this;
-                    }
-
-                    // Escape the characters (see Commonmark example 327 and think of it with a non-ascii symbol)
-                    int previousPosition = 0;
-                    for (int i = 0; i < domainName.Length; i++)
-                    {
-                        var escape = HtmlHelper.EscapeUrlCharacter(domainName[i]);
-                        if (escape != null)
+                        if (idnaEncodeDomain)
                         {
-                            Write(domainName, previousPosition, i - previousPosition);
-                            previousPosition = i + 1;
-                            Write(escape);
+                            return WriteNonAsciiDomainName(content, schemeLength, domainNameLength);
                         }
                     }
-                    Write(domainName, previousPosition, domainName.Length - previousPosition);
-                    WriteEscapeUrl(content, endOfDomain, content.Length);
+
+                    break;
+                }
+            }
+
+            WriteIndent();
+            WriteEscapeUrlCore(content, 0, content.Length);
+            return this;
+
+            HtmlRenderer WriteNonAsciiDomainName(string content, int schemeLength, int domainNameLength)
+            {
+                Debug.Assert(content is not null && schemeLength > 3 && domainNameLength >= 0 && schemeLength + domainNameLength <= content.Length);
+
+                string? domainName = null;
+                try
+                {
+                    domainName = s_idnMapping.GetAscii(content, schemeLength, domainNameLength);
+                    domainNameLength += schemeLength;
+                }
+                catch
+                {
+                    // Not a valid IDN, fallback to non-punycode encoding
+                }
+
+                WriteIndent();
+
+                if (domainName is not null)
+                {
+                    WriteEscapeUrlCore(content, 0, schemeLength);
+                    WriteEscapeUrlCore(domainName, 0, domainName.Length);
+                    WriteEscapeUrlCore(content, domainNameLength, content.Length - domainNameLength);
                 }
                 else
                 {
-                    WriteEscapeUrl(content, schemeOffset, content.Length);
+                    WriteEscapeUrlCore(content, 0, content.Length);
                 }
-            }
-            else // This is a relative URL
-            {
-                WriteEscapeUrl(content, 0, content.Length);
-            }
 
-            return this;
+                return this;
+            }
         }
 
-        private void WriteEscapeUrl(string content, int start, int length)
+        private static (int DomainNameLength, bool ContainsNonAscii) ScanDomainName(ReadOnlySpan<char> domainName)
         {
-            int previousPosition = start;
-            for (var i = previousPosition; i < length; i++)
+            int domainNameLength = domainName.IndexOfAny('/', '?', ':');
+            if (domainNameLength < 0)
             {
-                var c = content[i];
+                domainNameLength = domainName.Length;
+            }
+            else
+            {
+                domainName = domainName.Slice(0, domainNameLength);
+            }
 
-                if (c < 128)
+            bool containsNonAscii = false;
+            foreach (char c in domainName)
+            {
+                if (c > 127)
                 {
-                    var escape = HtmlHelper.EscapeUrlCharacter(c);
-                    if (escape != null)
+                    containsNonAscii = true;
+                    int fragment = domainName.IndexOf('#');
+                    if (fragment >= 0)
                     {
-                        Write(content, previousPosition, i - previousPosition);
-                        previousPosition = i + 1;
-                        Write(escape);
+                        domainNameLength = fragment;
                     }
+                    break;
+                }
+            }
+
+            return (domainNameLength, containsNonAscii);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void WriteEscapeUrlCore(string content, int offset, int length)
+        {
+            Debug.Assert(content is not null && offset >= 0 && length >= 0 && length <= content.Length);
+
+#if NETCOREAPP3_1_OR_GREATER
+            if (Sse3.IsSupported && BitConverter.IsLittleEndian && length >= 2 * Vector128<short>.Count)
+            {
+                WriteEscapeUrlCoreSse3(
+                    ref Unsafe.Add(ref Unsafe.AsRef(in content.GetPinnableReference()), offset),
+                    ref Unsafe.Add(ref Unsafe.AsRef(in content.GetPinnableReference()), length));
+            }
+            else
+            {
+                WriteEscapeUrlCorePortable(MemoryMarshal.CreateReadOnlySpan(
+                    ref Unsafe.Add(ref Unsafe.AsRef(in content.GetPinnableReference()), offset),
+                    length));
+            }
+#else
+            WriteEscapeUrlCorePortable(content.AsSpan(offset, length));
+#endif
+        }
+
+#if NETCOREAPP3_1_OR_GREATER
+        private void WriteEscapeUrlCoreSse3(ref char textStartRef, ref char textEndRef)
+        {
+            Debug.Assert((nint)Unsafe.ByteOffset(ref textStartRef, ref textEndRef) >= 2 * Vector128<byte>.Count);
+
+            ref char previousTextRef = ref textStartRef;
+
+            do
+            {
+                // This bitmap is calculated based on HtmlHelper.EscapeUrlsForAscii
+                const ulong Bitmap_0_3 = 506376794573046599UL;
+                const ulong Bitmap_4_7 = 9487856997555700483UL;
+
+                // See CharacterMap.IndexOfOpeningCharacter for an explaination of this algorithm
+                Vector128<byte> input = Sse2.PackUnsignedSaturate(
+                    Unsafe.ReadUnaligned<Vector128<short>>(ref Unsafe.As<char, byte>(ref textStartRef)),
+                    Unsafe.ReadUnaligned<Vector128<short>>(ref Unsafe.As<char, byte>(ref Unsafe.Add(ref textStartRef, Vector128<short>.Count))));
+
+                Vector128<byte> higherNibbles = Sse2.And(Sse2.ShiftRightLogical(input.AsUInt16(), 4).AsByte(), Vector128.Create((byte)0xF));
+                Vector128<byte> bitsets = Ssse3.Shuffle(Vector128.Create(Bitmap_0_3, Bitmap_4_7).AsByte(), input);
+                Vector128<byte> bitmask = Ssse3.Shuffle(Vector128.Create(0x8040201008040201).AsByte(), higherNibbles);
+                Vector128<byte> nonAsciiResult = Sse2.CompareLessThan(input.AsSByte(), Vector128<sbyte>.Zero).AsByte();
+                Vector128<byte> asciiResult = Sse2.And(bitsets, bitmask);
+                Vector128<byte> result = Sse2.Or(nonAsciiResult, asciiResult);
+
+                if (result.Equals(Vector128<byte>.Zero))
+                {
+                    AssertNothingToEscape(ref textStartRef, 2 * Vector128<short>.Count);
+                    textStartRef = ref Unsafe.Add(ref textStartRef, 2 * Vector128<short>.Count);
                 }
                 else
                 {
-                    Write(content, previousPosition, i - previousPosition);
-                    previousPosition = i + 1;
+                    int minIndex = BitOperations.TrailingZeroCount((uint)~Sse2.MoveMask(Sse2.CompareEqual(result, Vector128<byte>.Zero)));
 
-                    // Special case for Edge/IE workaround for MarkdownEditor, don't escape non-ASCII chars to make image links working
-                    if (UseNonAsciiNoEscape)
+                    AssertNothingToEscape(ref textStartRef, minIndex);
+                    textStartRef = ref Unsafe.Add(ref textStartRef, minIndex);
+                    Debug.Assert(HtmlHelper.EscapeUrlCharacter(textStartRef) is not null || textStartRef > 127);
+
+                    WriteRaw(MemoryMarshal.CreateReadOnlySpan(ref previousTextRef, (int)Unsafe.ByteOffset(ref previousTextRef, ref textStartRef) >> 1));
+
+                    textStartRef = ref EscapeNextCore(ref textStartRef, ref textEndRef);
+                    previousTextRef = ref textStartRef;
+                }
+            }
+            while ((nint)Unsafe.ByteOffset(ref textStartRef, ref textEndRef) >= 2 * Vector128<byte>.Count);
+
+            int previousPosition = (int)Unsafe.ByteOffset(ref previousTextRef, ref textStartRef) >> 1;
+            int length = (int)Unsafe.ByteOffset(ref previousTextRef, ref textEndRef) >> 1;
+            WriteEscapeUrlCorePortable(MemoryMarshal.CreateReadOnlySpan(ref previousTextRef, length), previousPosition);
+
+            [Conditional("DEBUG")]
+            static void AssertNothingToEscape(ref char textStartRef, int length)
+            {
+                foreach (char c in MemoryMarshal.CreateReadOnlySpan(ref textStartRef, length))
+                {
+                    Debug.Assert(c <= 127);
+                    Debug.Assert(HtmlHelper.EscapeUrlCharacter(c) is null);
+                }
+            }
+
+            ref char EscapeNextCore(ref char textStartRef, ref char textEndRef)
+            {
+                while (!Unsafe.AreSame(ref textStartRef, ref textEndRef))
+                {
+                    char c = textStartRef;
+
+                    string?[] asciiEscapeTable = HtmlHelper.EscapeUrlsForAscii;
+                    if (c < (uint)asciiEscapeTable.Length)
                     {
-                        Write(c);
-                    }
-                    else
-                    {
-                        byte[] bytes;
-                        if (c >= '\ud800' && c <= '\udfff' && previousPosition < length)
+                        var escape = asciiEscapeTable[c];
+                        if (escape is null)
                         {
-                            bytes = Encoding.UTF8.GetBytes(new[] { c, content[previousPosition] });
-                            // Skip next char as it is decoded above
-                            i++;
-                            previousPosition = i + 1;
+                            break;
                         }
                         else
                         {
-                            bytes = Encoding.UTF8.GetBytes(new[] { c });
+                            WriteRaw(escape);
+                            textStartRef = ref Unsafe.Add(ref textStartRef, 1);
                         }
-                        for (var j = 0; j < bytes.Length; j++)
-                        {
-                            Write($"%{bytes[j]:X2}");
-                        }
+                    }
+                    else if (UseNonAsciiNoEscape)
+                    {
+                        WriteRaw(c);
+                        textStartRef = ref Unsafe.Add(ref textStartRef, 1);
+                    }
+                    else if (CharHelper.IsHighSurrogate(c) && (nint)Unsafe.ByteOffset(ref textStartRef, ref textEndRef) > 2)
+                    {
+                        EscapeSurrogatePair(c, Unsafe.Add(ref textStartRef, 1));
+                        textStartRef = ref Unsafe.Add(ref textStartRef, 2);
+                    }
+                    else
+                    {
+                        EscapeNonAscii(c);
+                        textStartRef = ref Unsafe.Add(ref textStartRef, 1);
+                    }
+                }
+
+                return ref textStartRef;
+            }
+        }
+#endif
+
+        private void WriteEscapeUrlCorePortable(ReadOnlySpan<char> content, int previousPosition = 0)
+        {
+            int i = previousPosition;
+            previousPosition = 0;
+            for (; (uint)i < (uint)content.Length; i++)
+            {
+                char c = content[i];
+
+                string?[] asciiEscapeTable = HtmlHelper.EscapeUrlsForAscii;
+                if (c < (uint)asciiEscapeTable.Length)
+                {
+                    var escape = asciiEscapeTable[c];
+                    if (escape != null)
+                    {
+                        Flush(content, previousPosition, i - previousPosition);
+                        previousPosition = i + 1;
+                        WriteRaw(escape);
+                    }
+                }
+                else if (!UseNonAsciiNoEscape)
+                {
+                    Flush(content, previousPosition, i - previousPosition);
+                    previousPosition = i + 1;
+
+                    if (CharHelper.IsHighSurrogate(c) && (uint)previousPosition < (uint)content.Length)
+                    {
+                        EscapeSurrogatePair(c, content[previousPosition]);
+
+                        // Skip next char as it is decoded above
+                        i++;
+                        previousPosition = i + 1;
+                    }
+                    else
+                    {
+                        EscapeNonAscii(c);
                     }
                 }
             }
-            Write(content, previousPosition, length - previousPosition);
+
+            Flush(content, previousPosition, content.Length - previousPosition);
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            void Flush(ReadOnlySpan<char> content, int previousPosition, int length)
+            {
+                if (length != 0)
+                {
+                    WriteRaw(content.Slice(previousPosition, length));
+                }
+            }
         }
+
+#if NETCOREAPP3_1_OR_GREATER
+        private void EscapeSurrogatePair(char high, char low)
+        {
+            if (!Rune.TryCreate(high, low, out Rune rune))
+                rune = Rune.ReplacementChar;
+
+            EscapeRune(rune);
+        }
+
+        private void EscapeNonAscii(char c)
+        {
+            if (!Rune.TryCreate(c, out Rune rune))
+                rune = Rune.ReplacementChar;
+
+            EscapeRune(rune);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void EscapeRune(Rune rune)
+        {
+            Span<byte> utf8 = stackalloc byte[4];
+            bool success = rune.TryEncodeToUtf8(utf8, out int utf8Length);
+            Debug.Assert(success);
+
+            Span<char> utf16 = stackalloc char[12];
+
+            ref byte byteRef = ref MemoryMarshal.GetReference(utf8);
+            ref char charRef = ref MemoryMarshal.GetReference(utf16);
+
+            for (int i = 0; i < utf8Length; i++)
+            {
+                charRef = '%';
+
+                byte b = byteRef;
+
+                // Based on https://github.com/dotnet/runtime/blob/8582c5cbcf03d6c0d1d3f0d11e622b8b0168f50f/src/libraries/Common/src/System/HexConverter.cs#L83
+                uint difference = (((uint)b & 0xF0U) << 4) + ((uint)b & 0x0FU) - 0x8989U;
+                uint packedResult = ((((uint)(-(int)difference) & 0x7070U) >> 4) + difference + 0xB9B9U);
+
+                Unsafe.Add(ref charRef, 1) = (char)(packedResult >> 8);
+                Unsafe.Add(ref charRef, 2) = (char)(packedResult & 0xFF);
+
+                byteRef = ref Unsafe.Add(ref byteRef, 1);
+                charRef = ref Unsafe.Add(ref charRef, 3);
+            }
+
+            WriteRaw(utf16.Slice(0, utf8Length * 3));
+        }
+#else
+        private void EscapeSurrogatePair(char high, char low)
+        {
+            foreach (byte b in Encoding.UTF8.GetBytes(new[] { high, low }))
+            {
+                WriteRaw($"%{b:X2}");
+            }
+        }
+
+        private void EscapeNonAscii(char c)
+        {
+            foreach (byte b in Encoding.UTF8.GetBytes(new[] { c }))
+            {
+                WriteRaw($"%{b:X2}");
+            }
+        }
+#endif
 
         /// <summary>
         /// Writes the attached <see cref="HtmlAttributes"/> on the specified <see cref="MarkdownObject"/>.
