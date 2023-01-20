@@ -367,7 +367,8 @@ namespace Markdig.Renderers
 
             do
             {
-                // This bitmap is calculated based on HtmlHelper.EscapeUrlsForAscii
+                // This bitmap is calculated based on HtmlHelper.EscapeUrlsForAscii.
+                // It matches on any character that has to be percent-encoded.
                 const ulong Bitmap_0_3 = 506376794573046599UL;
                 const ulong Bitmap_4_7 = 9487856997555700483UL;
 
@@ -398,7 +399,43 @@ namespace Markdig.Renderers
 
                     WriteRaw(MemoryMarshal.CreateReadOnlySpan(ref previousTextRef, (int)Unsafe.ByteOffset(ref previousTextRef, ref textStartRef) >> 1));
 
-                    textStartRef = ref EscapeNextCore(ref textStartRef, ref textEndRef);
+                    Debug.Assert(!Unsafe.AreSame(ref textStartRef, ref textEndRef));
+                    do
+                    {
+                        char c = textStartRef;
+
+                        string?[] asciiEscapeTable = HtmlHelper.EscapeUrlsForAscii;
+                        if (c < (uint)asciiEscapeTable.Length)
+                        {
+                            var escape = asciiEscapeTable[c];
+                            if (escape is null)
+                            {
+                                break;
+                            }
+                            else
+                            {
+                                WriteRaw(escape);
+                                textStartRef = ref Unsafe.Add(ref textStartRef, 1);
+                            }
+                        }
+                        else if (UseNonAsciiNoEscape)
+                        {
+                            WriteRaw(c);
+                            textStartRef = ref Unsafe.Add(ref textStartRef, 1);
+                        }
+                        else if (CharHelper.IsHighSurrogate(c) && (nint)Unsafe.ByteOffset(ref textStartRef, ref textEndRef) > 2)
+                        {
+                            EscapeSurrogatePair(c, Unsafe.Add(ref textStartRef, 1));
+                            textStartRef = ref Unsafe.Add(ref textStartRef, 2);
+                        }
+                        else
+                        {
+                            EscapeNonAscii(c);
+                            textStartRef = ref Unsafe.Add(ref textStartRef, 1);
+                        }
+                    }
+                    while (!Unsafe.AreSame(ref textStartRef, ref textEndRef));
+
                     previousTextRef = ref textStartRef;
                 }
             }
@@ -417,54 +454,13 @@ namespace Markdig.Renderers
                     Debug.Assert(HtmlHelper.EscapeUrlCharacter(c) is null);
                 }
             }
-
-            ref char EscapeNextCore(ref char textStartRef, ref char textEndRef)
-            {
-                while (!Unsafe.AreSame(ref textStartRef, ref textEndRef))
-                {
-                    char c = textStartRef;
-
-                    string?[] asciiEscapeTable = HtmlHelper.EscapeUrlsForAscii;
-                    if (c < (uint)asciiEscapeTable.Length)
-                    {
-                        var escape = asciiEscapeTable[c];
-                        if (escape is null)
-                        {
-                            break;
-                        }
-                        else
-                        {
-                            WriteRaw(escape);
-                            textStartRef = ref Unsafe.Add(ref textStartRef, 1);
-                        }
-                    }
-                    else if (UseNonAsciiNoEscape)
-                    {
-                        WriteRaw(c);
-                        textStartRef = ref Unsafe.Add(ref textStartRef, 1);
-                    }
-                    else if (CharHelper.IsHighSurrogate(c) && (nint)Unsafe.ByteOffset(ref textStartRef, ref textEndRef) > 2)
-                    {
-                        EscapeSurrogatePair(c, Unsafe.Add(ref textStartRef, 1));
-                        textStartRef = ref Unsafe.Add(ref textStartRef, 2);
-                    }
-                    else
-                    {
-                        EscapeNonAscii(c);
-                        textStartRef = ref Unsafe.Add(ref textStartRef, 1);
-                    }
-                }
-
-                return ref textStartRef;
-            }
         }
 #endif
 
-        private void WriteEscapeUrlCorePortable(ReadOnlySpan<char> content, int previousPosition = 0)
+        private void WriteEscapeUrlCorePortable(ReadOnlySpan<char> content, int start = 0)
         {
-            int i = previousPosition;
-            previousPosition = 0;
-            for (; (uint)i < (uint)content.Length; i++)
+            int previousPosition = 0;
+            for (int i = start; (uint)i < (uint)content.Length; i++)
             {
                 char c = content[i];
 
