@@ -76,7 +76,7 @@ public sealed class CharacterMap<T> where T : class
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            T[] asciiMap = this._asciiMap;
+            T[] asciiMap = _asciiMap;
             if (openingChar < (uint)asciiMap.Length)
             {
                 return asciiMap[openingChar];
@@ -97,6 +97,7 @@ public sealed class CharacterMap<T> where T : class
     /// <param name="start">The start.</param>
     /// <param name="end">The end.</param>
     /// <returns>Index position within the string of the first opening character found in the specified text; if not found, returns -1</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int IndexOfOpeningCharacter(string text, int start, int end)
     {
         Debug.Assert(text is not null);
