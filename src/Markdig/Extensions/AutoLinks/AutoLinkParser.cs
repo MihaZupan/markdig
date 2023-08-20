@@ -41,52 +41,54 @@ public class AutoLinkParser : InlineParser
     public override bool Match(InlineProcessor processor, ref StringSlice slice)
     {
         // Previous char must be a whitespace or a punctuation
-        var previousChar = slice.PeekCharExtra(-1);
-        if (!previousChar.IsWhiteSpaceOrZero() && Options.ValidPreviousCharacters.IndexOf(previousChar) == -1)
+        char previousChar = slice.PeekCharExtra(-1);
+        if (!previousChar.IsWhiteSpaceOrZero() && !Options.ValidPreviousCharacters.Contains(previousChar))
         {
             return false;
         }
 
-        var startPosition = slice.Start;
+        int startPosition = slice.Start;
         int domainOffset = 0;
 
-        var c = slice.CurrentChar;
+        char c = slice.CurrentChar;
+        ReadOnlySpan<char> span = slice.AsSpan();
+
         // Precheck URL
         switch (c)
         {
             case 'h':
-                if (slice.MatchLowercase("ttp://", 1))
+                if (span.StartsWith("http://", StringComparison.Ordinal))
                 {
                     domainOffset = 7; // http://
                 }
-                else if (slice.MatchLowercase("ttps://", 1))
+                else if (span.StartsWith("https://", StringComparison.Ordinal))
                 {
                     domainOffset = 8; // https://
                 }
                 else return false;
                 break;
             case 'f':
-                if (!slice.MatchLowercase("tp://", 1))
+                if (!span.StartsWith("ftp://", StringComparison.Ordinal))
                 {
                     return false;
                 }
                 domainOffset = 6; // ftp://
                 break;
             case 'm':
-                if (!slice.MatchLowercase("ailto:", 1))
+                if (!span.StartsWith("mailto:", StringComparison.Ordinal))
                 {
                     return false;
                 }
                 break;
             case 't':
-                if (!slice.MatchLowercase("el:", 1))
+                if (!span.StartsWith("tel:", StringComparison.Ordinal))
                 {
                     return false;
                 }
                 domainOffset = 4;
                 break;
             case 'w':
-                if (!slice.MatchLowercase("ww.", 1)) // We won't match http:/www. or /www.xxx
+                if (!span.StartsWith("www.", StringComparison.Ordinal)) // We won't match http:/www. or /www.xxx
                 {
                     return false;
                 }
