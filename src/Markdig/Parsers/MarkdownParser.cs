@@ -53,7 +53,7 @@ public static class MarkdownParser
         {
             blockProcessor.Open(document);
 
-            ProcessBlocks(blockProcessor, new LineReader(text));
+            ProcessBlocks(blockProcessor, text);
 
             if (pipeline.TrackTrivia)
             {
@@ -117,8 +117,11 @@ public static class MarkdownParser
         return text.Replace('\0', CharHelper.ReplacementChar);
     }
 
-    private static void ProcessBlocks(BlockProcessor blockProcessor, LineReader lineReader)
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProcessBlocks(BlockProcessor blockProcessor, string text)
     {
+        var lineReader = new LineReader(text);
+
         while (true)
         {
             // Get the precise position of the begining of the line
@@ -132,9 +135,11 @@ public static class MarkdownParser
 
             blockProcessor.ProcessLine(lineText);
         }
+
         blockProcessor.CloseAll(true);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ProcessInlines(InlineProcessor inlineProcessor, MarkdownDocument document)
     {
         // "stackless" processor
