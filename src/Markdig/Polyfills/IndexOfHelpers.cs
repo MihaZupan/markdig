@@ -21,6 +21,21 @@ internal static class IndexOfHelpers
 
         return false;
     }
+
+#if !NETSTANDARD2_1_OR_GREATER
+    public static int IndexOfAny(this ReadOnlySpan<char> span, string values)
+    {
+        for (int i = 0; i < span.Length; i++)
+        {
+            if (values.Contains(span[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+#endif
 }
 
 #endif
