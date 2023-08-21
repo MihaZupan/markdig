@@ -8,12 +8,12 @@ namespace System;
 
 internal static class IndexOfHelpers
 {
-    public static bool ContainsAnyExcept(this ReadOnlySpan<char> span, char value0, char value1)
+    public static bool ContainsAnyExcept(this ReadOnlySpan<char> span, char value0, char value1, char value2)
     {
         for (int i = 0; i < span.Length; i++)
         {
             char c = span[i];
-            if (c != value0 && c != value1)
+            if (c != value0 && c != value1 && c != value2)
             {
                 return true;
             }

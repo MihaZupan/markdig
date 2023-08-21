@@ -93,7 +93,7 @@ public class CodeInlineParser : InlineParser
         if (rawContent.Length > 2 &&
             rawContent[0] is ' ' or '\n' &&
             rawContent[rawContent.Length - 1] is ' ' or '\n' &&
-            rawContent.ContainsAnyExcept(' ', '\n'))
+            rawContent.ContainsAnyExcept(' ', '\r', '\n'))
         {
             content.Offset++;
             content.Length -= 2;
