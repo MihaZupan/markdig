@@ -2,8 +2,10 @@
 // This file is licensed under the BSD-Clause 2 license. 
 // See the license.txt file in the project root for more information.
 
+using System.Collections.Concurrent;
+using System.Linq;
 using System.Runtime.CompilerServices;
-
+using System.Threading;
 using Markdig.Helpers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -16,7 +18,28 @@ namespace Markdig.Renderers;
 /// <seealso cref="IMarkdownRenderer" />
 public abstract class RendererBase : IMarkdownRenderer
 {
-    private readonly Dictionary<KeyWrapper, IMarkdownObjectRenderer?> _renderersPerType = new();
+    private sealed class TypeInfo
+    {
+        public IMarkdownObjectRenderer? Renderer;
+        public int SeenCount;
+    }
+
+    private readonly struct RendererEntry
+    {
+        public readonly IntPtr Key;
+        public readonly IMarkdownObjectRenderer? Renderer;
+
+        public RendererEntry(IntPtr key, IMarkdownObjectRenderer? renderer)
+        {
+            Key = key;
+            Renderer = renderer;
+        }
+    }
+
+    private RendererEntry[] _renderersPerType = Array.Empty<RendererEntry>();
+    private readonly ConcurrentDictionary<IntPtr, TypeInfo> _typeStats = new();
+    private int _objectsSinceUnknownType = 0;
+
     internal int _childrenDepth = 0;
 
     /// <summary>
@@ -24,23 +47,55 @@ public abstract class RendererBase : IMarkdownRenderer
     /// </summary>
     protected RendererBase() { }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private IMarkdownObjectRenderer? GetRendererInstance(MarkdownObject obj)
     {
-        KeyWrapper key = GetKeyForType(obj);
-        Type objectType = obj.GetType();
+        IntPtr key = GetKeyForType(obj);
 
-        for (int i = 0; i < ObjectRenderers.Count; i++)
+        TypeInfo? typeInfo;
+
+        while (!_typeStats.TryGetValue(key, out typeInfo))
         {
-            var renderer = ObjectRenderers[i];
-            if (renderer.Accept(this, objectType))
+            _objectsSinceUnknownType = 0;
+            _renderersPerType = Array.Empty<RendererEntry>();
+
+            typeInfo = new TypeInfo();
+
+            Type objectType = obj.GetType();
+            for (int i = 0; i < ObjectRenderers.Count; i++)
             {
-                _renderersPerType[key] = renderer;
-                return renderer;
+                var renderer = ObjectRenderers[i];
+                if (renderer.Accept(this, objectType))
+                {
+                    typeInfo.Renderer = renderer;
+                    break;
+                }
+            }
+
+            if (_typeStats.TryAdd(key, typeInfo))
+            {
+                _renderersPerType = Array.Empty<RendererEntry>();
+                Interlocked.Exchange(ref _objectsSinceUnknownType, 0);
+                break;
             }
         }
 
-        _renderersPerType[key] = null;
-        return null;
+        Interlocked.Increment(ref typeInfo.SeenCount);
+
+        if (Interlocked.Increment(ref _objectsSinceUnknownType) == 10_000)
+        {
+            _renderersPerType = CreateRenderersArray(_typeStats);
+        }
+
+        return typeInfo.Renderer;
+
+        static RendererEntry[] CreateRenderersArray(ConcurrentDictionary<IntPtr, TypeInfo> typeStats)
+        {
+            return typeStats
+                .OrderByDescending(e => e.Value.SeenCount)
+                .Select(e => new RendererEntry(e.Key, e.Value.Renderer))
+                .ToArray();
+        }
     }
 
     public ObjectRendererCollection ObjectRenderers { get; } = new();
@@ -77,12 +132,11 @@ public abstract class RendererBase : IMarkdownRenderer
         bool saveIsFirstInContainer = IsFirstInContainer;
         bool saveIsLastInContainer = IsLastInContainer;
 
-        var children = containerBlock;
-        for (int i = 0; i < children.Count; i++)
+        for (int i = 0; i < containerBlock.Count; i++)
         {
             IsFirstInContainer = i == 0;
-            IsLastInContainer = i + 1 == children.Count;
-            Write(children[i]);
+            IsLastInContainer = i + 1 == containerBlock.Count;
+            Write(containerBlock[i]);
         }
 
         IsFirstInContainer = saveIsFirstInContainer;
@@ -140,11 +194,21 @@ public abstract class RendererBase : IMarkdownRenderer
         // Calls before writing an object
         ObjectWriteBefore?.Invoke(this, obj);
 
-        if (!_renderersPerType.TryGetValue(GetKeyForType(obj), out IMarkdownObjectRenderer? renderer))
+        IMarkdownObjectRenderer? renderer = null;
+        IntPtr key = GetKeyForType(obj);
+
+        foreach (RendererEntry entry in _renderersPerType)
         {
-            renderer = GetRendererInstance(obj);
+            if (key == entry.Key)
+            {
+                renderer = entry.Renderer;
+                goto Render;
+            }
         }
 
+        renderer = GetRendererInstance(obj);
+
+    Render:
         if (renderer is not null)
         {
             renderer.Write(this, obj);
@@ -163,22 +227,8 @@ public abstract class RendererBase : IMarkdownRenderer
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static KeyWrapper GetKeyForType(MarkdownObject obj)
+    private static IntPtr GetKeyForType(MarkdownObject obj)
     {
-        IntPtr typeHandle = Type.GetTypeHandle(obj).Value;
-        return new KeyWrapper(typeHandle);
-    }
-
-    private readonly struct KeyWrapper : IEquatable<KeyWrapper>
-    {
-        public readonly IntPtr Key;
-
-        public KeyWrapper(IntPtr key) => Key = key;
-
-        public bool Equals(KeyWrapper other) => Key == other.Key;
-
-        public override int GetHashCode() => Key.GetHashCode();
-
-        public override bool Equals(object? obj) => throw new NotImplementedException();
+        return Type.GetTypeHandle(obj).Value;
     }
 }
