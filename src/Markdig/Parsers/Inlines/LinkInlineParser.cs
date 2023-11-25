@@ -19,7 +19,7 @@ public class LinkInlineParser : InlineParser
     /// </summary>
     public LinkInlineParser()
     {
-        OpeningCharacters = new[] {'[', ']', '!'};
+        OpeningCharacters = ['[', ']', '!'];
     }
 
     public override bool Match(InlineProcessor processor, ref StringSlice slice)

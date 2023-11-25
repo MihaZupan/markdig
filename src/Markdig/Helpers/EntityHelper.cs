@@ -65,16 +65,10 @@ public static class EntityHelper
 
         utf32 -= 65536;
         return new string(
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
-            stackalloc
-#else
-            new
-#endif
-            char[]
-        {
+        [
             (char)((uint)utf32 / 1024 + 55296),
             (char)((uint)utf32 % 1024 + 56320)
-        });
+        ]);
     }
 
     internal static void DecodeEntity(int utf32, ref ValueStringBuilder sb)

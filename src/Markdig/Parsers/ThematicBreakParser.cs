@@ -23,7 +23,7 @@ public class ThematicBreakParser : BlockParser
     /// </summary>
     public ThematicBreakParser()
     {
-        OpeningCharacters = new[] {'-', '_', '*'};
+        OpeningCharacters = ['-', '_', '*'];
     }
 
     public override BlockState TryOpen(BlockProcessor processor)

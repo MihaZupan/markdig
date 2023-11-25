@@ -73,14 +73,14 @@ internal sealed class CompactPrefixTree<TValue> : IReadOnlyDictionary<string, TV
     }
 
     private Node[] _tree;
-    private static readonly Node[] _emptyTree = new Node[0];
+    private static readonly Node[] _emptyTree = [];
 
     private KeyValuePair<string, TValue>[] _matches;
-    private static readonly KeyValuePair<string, TValue>[] _emptyMatches = new KeyValuePair<string, TValue>[0];
+    private static readonly KeyValuePair<string, TValue>[] _emptyMatches = [];
 
     private int _childrenIndex = 0;
     private int[] _children = _emptyChildren;
-    private static readonly int[] _emptyChildren = new int[0];
+    private static readonly int[] _emptyChildren = [];
 
     #region Size and Capacity
 

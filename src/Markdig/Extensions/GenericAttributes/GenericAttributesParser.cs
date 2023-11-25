@@ -23,7 +23,7 @@ public class GenericAttributesParser : InlineParser
     /// </summary>
     public GenericAttributesParser()
     {
-        OpeningCharacters = new[] { '{' };
+        OpeningCharacters = ['{'];
     }
 
     public override bool Match(InlineProcessor processor, ref StringSlice slice)

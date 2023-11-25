@@ -30,7 +30,7 @@ public class PipeTableParser : InlineParser, IPostInlineProcessor
     public PipeTableParser(LineBreakInlineParser lineBreakParser, PipeTableOptions? options = null)
     {
         this.lineBreakParser = lineBreakParser ?? throw new ArgumentNullException(nameof(lineBreakParser));
-        OpeningCharacters = new[] { '|', '\n', '\r' };
+        OpeningCharacters = ['|', '\n', '\r'];
         Options = options ?? new PipeTableOptions();
     }
 
