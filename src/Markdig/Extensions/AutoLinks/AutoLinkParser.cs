@@ -6,7 +6,6 @@ using Markdig.Helpers;
 using Markdig.Parsers;
 using Markdig.Renderers.Html;
 using Markdig.Syntax.Inlines;
-using System.Buffers;
 
 namespace Markdig.Extensions.AutoLinks;
 
@@ -32,19 +31,18 @@ public class AutoLinkParser : InlineParser
             'w', // for www.
         ];
 
-        _validPrecedingCharacters = SearchValues.Create(CharHelper.WhitespaceChars + '\0' + Options.ValidPreviousCharacters);
         _listOfCharCache = new ListOfCharCache();
     }
 
     public readonly AutoLinkOptions Options;
 
-    private readonly SearchValues<char> _validPrecedingCharacters;
     private readonly ListOfCharCache _listOfCharCache;
 
     public override bool Match(InlineProcessor processor, ref StringSlice slice)
     {
         // Previous char must be a whitespace or a punctuation
-        if (!_validPrecedingCharacters.Contains(slice.PeekCharExtra(-1)))
+        var previousChar = slice.PeekCharExtra(-1);
+        if (!previousChar.IsWhiteSpaceOrZero() && Options.ValidPreviousCharacters.IndexOf(previousChar) == -1)
         {
             return false;
         }
