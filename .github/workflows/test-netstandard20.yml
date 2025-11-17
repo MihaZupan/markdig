@@ -24,17 +24,9 @@ jobs:
     
     - name: Patch build to test ${{ matrix.netstandard-version }}
       run: |
-        # Patch Markdig.Tests.csproj to target net8.0 only
-        sed -i 's/<TargetFrameworks>net8.0;net9.0<\/TargetFrameworks>/<TargetFrameworks>net8.0<\/TargetFrameworks>/' src/Markdig.Tests/Markdig.Tests.csproj
-        
         # Patch Markdig.targets to only build the target netstandard version
         sed -i 's/<TargetFrameworks>net462;netstandard2.0;netstandard2.1;net8.0;net9.0<\/TargetFrameworks>/<TargetFrameworks>${{ matrix.netstandard-version }}<\/TargetFrameworks>/' src/Markdig/Markdig.targets
-        
-        # Show the changes for verification
-        echo "=== Testing ${{ matrix.netstandard-version }} ==="
-        echo "=== Markdig.Tests.csproj changes ==="
-        grep "TargetFrameworks" src/Markdig.Tests/Markdig.Tests.csproj
-        echo "=== Markdig.targets changes ==="
+        echo "Markdig.targets TFM:"
         grep "TargetFrameworks" src/Markdig/Markdig.targets
     
     - name: Restore dependencies
