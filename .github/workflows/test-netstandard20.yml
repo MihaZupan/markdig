@@ -1,13 +1,6 @@
 name: Test netstandard
 
-on:
-  push:
-    paths-ignore:
-    - 'doc/**'
-    - 'img/**'
-    - 'changelog.md'
-    - 'readme.md'
-  pull_request:
+on: pull_request
 
 jobs:
   test-netstandard:
@@ -40,15 +33,19 @@ jobs:
         # Show the changes for verification
         echo "=== Testing ${{ matrix.netstandard-version }} ==="
         echo "=== Markdig.Tests.csproj changes ==="
-        grep -E "TargetFrameworks|LangVersion" src/Markdig.Tests/Markdig.Tests.csproj
+        grep "TargetFrameworks" src/Markdig.Tests/Markdig.Tests.csproj
         echo "=== Markdig.targets changes ==="
         grep "TargetFrameworks" src/Markdig/Markdig.targets
     
     - name: Restore dependencies
       run: dotnet restore src/Markdig.Tests/Markdig.Tests.csproj
     
-    - name: Build test project
-      run: dotnet build src/Markdig.Tests/Markdig.Tests.csproj --configuration Release --no-restore
-    
-    - name: Run tests
-      run: dotnet test src/Markdig.Tests/Markdig.Tests.csproj --configuration Release --no-build --verbosity normal
+    - name: Test Debug
+      run: |
+        dotnet build src/Markdig.Tests/Markdig.Tests.csproj -c Debug --no-restore
+        dotnet test src/Markdig.Tests/Markdig.Tests.csproj -c Debug --no-build
+        
+    - name: Test Release
+      run: |
+        dotnet build src/Markdig.Tests/Markdig.Tests.csproj -c Release --no-restore
+        dotnet test src/Markdig.Tests/Markdig.Tests.csproj -c Release --no-build
