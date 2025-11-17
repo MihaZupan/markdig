@@ -20,11 +20,19 @@ public class TestHtmlCodeBlocks
     public void TestKnownTags(string tag)
     {
         MarkdownDocument document = Markdown.Parse(
+#if NETFRAMEWORK
+            $"""
+            Hello
+             <{tag} />
+            World
+            """.Replace("\r\n", "\n").Replace("\r", "\n"));
+#else
             $"""
             Hello
              <{tag} />
             World
             """.ReplaceLineEndings("\n"));
+#endif
 
         HtmlBlock[] htmlBlocks = document.Descendants<HtmlBlock>().ToArray();
 

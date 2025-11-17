@@ -126,11 +126,19 @@ public sealed class TestPipeTable
     public void MultiLineCodeInlineWithPipeDelimitersRendersAsCode()
     {
         string markdown =
+#if NETFRAMEWORK
+            """
+            `
+            || hidden text ||
+            `
+            """.Replace("\r\n", "\n").Replace("\r", "\n");
+#else
             """
             `
             || hidden text ||
             `
             """.ReplaceLineEndings("\n");
+#endif
 
         var pipeline = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()
@@ -182,6 +190,18 @@ public sealed class TestPipeTable
     public void TableWithIndentedPipeAfterCodeInlineParsesCorrectly()
     {
         var markdown =
+#if NETFRAMEWORK
+            """
+            `
+            	|| hidden text ||
+            `
+
+              | Count | Value |
+              |-------|-------|
+              | 0     | B |
+
+            """.Replace("\r\n", "\n").Replace("\r", "\n");
+#else
             """
             `
             	|| hidden text ||
@@ -192,6 +212,7 @@ public sealed class TestPipeTable
               | 0     | B |
 
             """.ReplaceLineEndings("\n");
+#endif
 
         var pipeline = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()
