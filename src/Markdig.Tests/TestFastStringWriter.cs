@@ -52,7 +52,9 @@ public class TestFastStringWriter
         // Nops
         _writer.Close();
         _writer.Dispose();
+#if !NETFRAMEWORK
         await _writer.DisposeAsync();
+#endif
         _writer.Flush();
         await _writer.FlushAsync();
 
@@ -115,8 +117,12 @@ public class TestFastStringWriter
     }
 
     [Test]
+#if NETFRAMEWORK
+    [Ignore("ReadOnlySpan/ReadOnlyMemory not available on .NET Framework")]
+#endif
     public async Task Write_Span()
     {
+#if !NETFRAMEWORK
         _writer.Write("foo".AsSpan());
         AssertToString("foo");
 
@@ -129,6 +135,9 @@ public class TestFastStringWriter
 
         _writer.Write(new string('a', 1050).AsSpan());
         AssertToString("foobar\nbazfoo\n" + new string('a', 1050));
+#else
+        await Task.CompletedTask;
+#endif
     }
 
     [Test]
@@ -166,8 +175,12 @@ public class TestFastStringWriter
     }
 
     [Test]
+#if NETFRAMEWORK || NETSTANDARD2_0 || NETSTANDARD2_1
+    [Ignore("StringBuilder Write methods not available on older targets")]
+#endif
     public async Task Write_StringBuilder()
     {
+#if !(NETFRAMEWORK || NETSTANDARD2_0 || NETSTANDARD2_1)
         _writer.Write(new StringBuilder("foo"));
         AssertToString("foo");
 
@@ -182,5 +195,8 @@ public class TestFastStringWriter
         sb.Append('a', 1050);
         _writer.Write(sb);
         AssertToString("foobar\nbazfoo\nfoo" + new string('a', 1050));
+#else
+        await Task.CompletedTask;
+#endif
     }
 }
