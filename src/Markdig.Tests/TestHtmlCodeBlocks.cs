@@ -24,7 +24,7 @@ public class TestHtmlCodeBlocks
             Hello
              <{tag} />
             World
-            """.ReplaceLineEndings("\n"));
+            """.Replace("\r\n", "\n"));
 
         HtmlBlock[] htmlBlocks = document.Descendants<HtmlBlock>().ToArray();
 

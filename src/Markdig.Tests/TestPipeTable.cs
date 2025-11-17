@@ -130,7 +130,7 @@ public sealed class TestPipeTable
             `
             || hidden text ||
             `
-            """.ReplaceLineEndings("\n");
+            """.Replace("\r\n", "\n");
 
         var pipeline = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()
@@ -191,7 +191,7 @@ public sealed class TestPipeTable
               |-------|-------|
               | 0     | B |
 
-            """.ReplaceLineEndings("\n");
+            """.Replace("\r\n", "\n");
 
         var pipeline = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()

@@ -113,7 +113,7 @@ public class TestCharHelper
     public void IsAsciiPunctuation()
     {
         Test(
-            c => char.IsAscii(c) && ExpectedIsPunctuation(c),
+            c => c <= 127 && ExpectedIsPunctuation(c),
             CharHelper.IsAsciiPunctuation);
     }
 
@@ -121,7 +121,7 @@ public class TestCharHelper
     public void IsAsciiPunctuationOrZero()
     {
         Test(
-            c => char.IsAscii(c) && (ExpectedIsPunctuation(c) || c == 0),
+            c => c <= 127 && (ExpectedIsPunctuation(c) || c == 0),
             CharHelper.IsAsciiPunctuationOrZero);
     }
 

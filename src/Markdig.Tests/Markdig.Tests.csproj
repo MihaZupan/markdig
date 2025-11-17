@@ -1,14 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <TargetFrameworks>net462;net8.0;net9.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>13.0</LangVersion>
     <StartupObject>Markdig.Tests.Program</StartupObject>
-    <SpecExecutable>$(MSBuildProjectDirectory)\..\SpecFileGen\bin\$(Configuration)\$(TargetFramework)\SpecFileGen.dll</SpecExecutable>
-    <SpecTimestamp>$(MSBuildProjectDirectory)\..\SpecFileGen\bin\$(Configuration)\$(TargetFramework)\SpecFileGen.timestamp</SpecTimestamp>
+    <SpecExecutable>$(MSBuildProjectDirectory)\..\SpecFileGen\bin\$(Configuration)\net8.0\SpecFileGen.dll</SpecExecutable>
+    <SpecTimestamp>$(MSBuildProjectDirectory)\..\SpecFileGen\bin\$(Configuration)\net8.0\SpecFileGen-$(TargetFramework).timestamp</SpecTimestamp>
     <NoWarn>$(NoWarn);NETSDK1138</NoWarn>
   </PropertyGroup>
 
@@ -20,14 +20,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Markdig\Markdig.csproj" />
-    <ProjectReference Include="..\SpecFileGen\SpecFileGen.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="NUnit.Framework" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net462'">
+    <ProjectReference Include="..\SpecFileGen\SpecFileGen.csproj" />
     <ItemSpecExecutable Include="$(SpecExecutable)" />
     <InputSpecFiles Include="Specs\*.md" />
     <InputSpecFiles Include="NormalizeSpecs\*.md" />
@@ -39,7 +39,12 @@
     <OutputSpecFiles Include="@(InputSpecFiles-&gt;'%(RelativeDir)%(Filename).generated.cs')" />
   </ItemGroup>
 
-  <Target Name="GeneratedSpecsFile" BeforeTargets="BeforeCompile;CoreCompile" Inputs="@(ItemSpecExecutable);@(InputSpecFiles)" Outputs="@(ItemSpecExecutable-&gt;'%(RelativeDir)%(Filename).timestamp');@(InputSpecFiles-&gt;'%(RelativeDir)%(Filename).generated.cs')">
+  <Target
+    Name="GeneratedSpecsFile"
+    BeforeTargets="BeforeCompile;CoreCompile"
+    Inputs="@(ItemSpecExecutable);@(InputSpecFiles)"
+    Outputs="@(ItemSpecExecutable-&gt;'%(RelativeDir)%(Filename).timestamp');@(InputSpecFiles-&gt;'%(RelativeDir)%(Filename).generated.cs')"
+    Condition="'$(TargetFramework)' != 'net462'">
     <Message Importance="high" Text="Regenerating Specs Files" />
     <Exec Command="dotnet $(SpecExecutable)" />
     <WriteLinesToFile File="$(SpecTimestamp)" Lines="$([System.DateTime]::Now)" />
