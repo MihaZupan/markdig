@@ -1,4 +1,4 @@
-name: Test netstandard2.0
+name: Test netstandard
 
 on:
   push:
@@ -10,10 +10,14 @@ on:
   pull_request:
 
 jobs:
-  test-netstandard20:
+  test-netstandard:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    
+    strategy:
+      matrix:
+        netstandard-version: ['netstandard2.0', 'netstandard2.1']
     
     steps:
     - uses: actions/checkout@v4
@@ -22,23 +26,19 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: |
-          6.0.x
+          8.0.x
           9.0.x
     
-    - name: Patch test project for .NET 6 compatibility
+    - name: Patch build to test ${{ matrix.netstandard-version }}
       run: |
-        # Patch Directory.Packages.props to use Microsoft.NET.Test.Sdk 17.11.1 (last version supporting .NET 6)
-        sed -i 's/<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" \/>/<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" \/>/' src/Directory.Packages.props
+        # Patch Markdig.Tests.csproj to target net8.0 only
+        sed -i 's/<TargetFrameworks>net8.0;net9.0<\/TargetFrameworks>/<TargetFrameworks>net8.0<\/TargetFrameworks>/' src/Markdig.Tests/Markdig.Tests.csproj
         
-        # Patch Markdig.Tests.csproj to target net6.0
-        sed -i 's/<TargetFrameworks>net8.0;net9.0<\/TargetFrameworks>/<TargetFrameworks>net6.0<\/TargetFrameworks>/' src/Markdig.Tests/Markdig.Tests.csproj
-        
-        # Patch Markdig.targets to only build netstandard2.0 (to ensure we test that specific target)
-        sed -i 's/<TargetFrameworks>net462;netstandard2.0;netstandard2.1;net8.0;net9.0<\/TargetFrameworks>/<TargetFrameworks>netstandard2.0<\/TargetFrameworks>/' src/Markdig/Markdig.targets
+        # Patch Markdig.targets to only build the target netstandard version
+        sed -i 's/<TargetFrameworks>net462;netstandard2.0;netstandard2.1;net8.0;net9.0<\/TargetFrameworks>/<TargetFrameworks>${{ matrix.netstandard-version }}<\/TargetFrameworks>/' src/Markdig/Markdig.targets
         
         # Show the changes for verification
-        echo "=== Directory.Packages.props changes ==="
-        grep "Microsoft.NET.Test.Sdk" src/Directory.Packages.props
+        echo "=== Testing ${{ matrix.netstandard-version }} ==="
         echo "=== Markdig.Tests.csproj changes ==="
         grep -E "TargetFrameworks|LangVersion" src/Markdig.Tests/Markdig.Tests.csproj
         echo "=== Markdig.targets changes ==="
