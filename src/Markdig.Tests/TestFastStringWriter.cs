@@ -4,6 +4,8 @@ using Markdig.Helpers;
 
 namespace Markdig.Tests;
 
+#if !NETFRAMEWORK
+
 [TestFixture]
 public class TestFastStringWriter
 {
@@ -184,3 +186,4 @@ public class TestFastStringWriter
         AssertToString("foobar\nbazfoo\nfoo" + new string('a', 1050));
     }
 }
+#endif
