@@ -1,0 +1,52 @@
+name: Test netstandard2.0
+
+on:
+  push:
+    paths-ignore:
+    - 'doc/**'
+    - 'img/**'
+    - 'changelog.md'
+    - 'readme.md'
+  pull_request:
+
+jobs:
+  test-netstandard20:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          6.0.x
+          9.0.x
+    
+    - name: Patch test project for .NET 6 compatibility
+      run: |
+        # Patch Directory.Packages.props to use Microsoft.NET.Test.Sdk 17.11.1 (last version supporting .NET 6)
+        sed -i 's/<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" \/>/<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" \/>/' src/Directory.Packages.props
+        
+        # Patch Markdig.Tests.csproj to target net6.0
+        sed -i 's/<TargetFrameworks>net8.0;net9.0<\/TargetFrameworks>/<TargetFrameworks>net6.0<\/TargetFrameworks>/' src/Markdig.Tests/Markdig.Tests.csproj
+        
+        # Patch Markdig.targets to only build netstandard2.0 (to ensure we test that specific target)
+        sed -i 's/<TargetFrameworks>net462;netstandard2.0;netstandard2.1;net8.0;net9.0<\/TargetFrameworks>/<TargetFrameworks>netstandard2.0<\/TargetFrameworks>/' src/Markdig/Markdig.targets
+        
+        # Show the changes for verification
+        echo "=== Directory.Packages.props changes ==="
+        grep "Microsoft.NET.Test.Sdk" src/Directory.Packages.props
+        echo "=== Markdig.Tests.csproj changes ==="
+        grep -E "TargetFrameworks|LangVersion" src/Markdig.Tests/Markdig.Tests.csproj
+        echo "=== Markdig.targets changes ==="
+        grep "TargetFrameworks" src/Markdig/Markdig.targets
+    
+    - name: Restore dependencies
+      run: dotnet restore src/Markdig.Tests/Markdig.Tests.csproj
+    
+    - name: Build test project
+      run: dotnet build src/Markdig.Tests/Markdig.Tests.csproj --configuration Release --no-restore
+    
+    - name: Run tests
+      run: dotnet test src/Markdig.Tests/Markdig.Tests.csproj --configuration Release --no-build --verbosity normal
